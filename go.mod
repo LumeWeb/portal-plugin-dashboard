@@ -11,7 +11,7 @@ require (
 	github.com/markbates/goth v1.80.0
 	github.com/samber/lo v1.47.0
 	github.com/sethvargo/go-password v0.3.1
-	go.lumeweb.com/httputil v0.0.0-20240907105629-dbffb601f2ab
+	go.lumeweb.com/httputil v0.1.0
 	go.lumeweb.com/portal v0.4.1
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20241231150010-ecaedf54defd
 	go.uber.org/zap v1.27.0
