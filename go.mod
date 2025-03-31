@@ -2,7 +2,7 @@ module go.lumeweb.com/portal-plugin-dashboard
 
 go 1.23.0
 
-toolchain go1.23.2
+toolchain go1.24.1
 
 require (
 	github.com/google/uuid v1.6.0
@@ -11,7 +11,7 @@ require (
 	github.com/markbates/goth v1.80.0
 	github.com/samber/lo v1.47.0
 	github.com/sethvargo/go-password v0.3.1
-	go.lumeweb.com/httputil v0.0.0-20240907105629-dbffb601f2ab
+	go.lumeweb.com/httputil v0.3.4
 	go.lumeweb.com/portal v0.4.1
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20241231150010-ecaedf54defd
 	go.uber.org/zap v1.27.0
@@ -24,6 +24,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.5.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/AfterShip/email-verifier v1.4.1 // indirect
+	github.com/Oudwins/zog v0.18.4 // indirect
 	github.com/adjust/rmq/v5 v5.2.0 // indirect
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect

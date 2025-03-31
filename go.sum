@@ -39,6 +39,8 @@ github.com/Microsoft/go-winio v0.6.1/go.mod h1:LRdKpFKfdobln8UmuiYcKPot9D2v6svN5
 github.com/Microsoft/hcsshim v0.11.1 h1:hJ3s7GbWlGK4YVV92sO88BQSyF4ZLVy7/awqOlPxFbA=
 github.com/Microsoft/hcsshim v0.11.1/go.mod h1:nFJmaO4Zr5Y7eADdFOpYswDDlNVbvcIJJNJLECr5JQg=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
+github.com/Oudwins/zog v0.18.4 h1:ZGxBTDxSV9xrDKMa3JXoHu7Aned/qhCFZvB/Hhc7/RU=
+github.com/Oudwins/zog v0.18.4/go.mod h1:c4ADJ2zNkJp37ZViNy1o3ZZoeMvO7UQVO7BaPtRoocg=
 github.com/VividCortex/ewma v1.1.1/go.mod h1:2Tkkvm3sRDVXaiyucHiACn4cqf7DpdyLvmxzcbUokwA=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d/go.mod h1:asat636LX7Bqt5lYEZ27JNDcqxfjdBQuJ/MM4CN/Lzo=
 github.com/adjust/rmq/v5 v5.2.0 h1:ENPC+3i8N/LAvAfHpEpTMVl7q8zmwh4nl+hhxkao6KE=
@@ -645,6 +647,8 @@ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=
+github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
+github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
@@ -734,8 +738,8 @@ go.etcd.io/etcd/client/pkg/v3 v3.5.17/go.mod h1:4DqK1TKacp/86nJk4FLQqo6Mn2vvQFBm
 go.etcd.io/etcd/client/v3 v3.5.4/go.mod h1:ZaRkVgBZC+L+dLCjTcF1hRXpgZXQPOvnA/Ak/gq3kiY=
 go.etcd.io/etcd/client/v3 v3.5.17 h1:o48sINNeWz5+pjy/Z0+HKpj/xSnBkuVhVvXkjEXbqZY=
 go.etcd.io/etcd/client/v3 v3.5.17/go.mod h1:j2d4eXTHWkT2ClBgnnEPm/Wuu7jsqku41v9DZ3OtjQo=
-go.lumeweb.com/httputil v0.0.0-20240907105629-dbffb601f2ab h1:8FHJm1D00GJNV+5PkaJv+Wyvh5FR+s97rTubAdvi9mA=
-go.lumeweb.com/httputil v0.0.0-20240907105629-dbffb601f2ab/go.mod h1:3aHem0Fj7dH1Kj+WgluoF0WlSyXyUCrJk4bvmdq/Fgs=
+go.lumeweb.com/httputil v0.3.4 h1:+eaL6XvZ8u9JOuPrWctpLLi408lCHuy+fAon8LNr3f4=
+go.lumeweb.com/httputil v0.3.4/go.mod h1:JuBvPR51DLTS75xiT0AcAP/Jrk14C6jNM/lgvu8Z3iY=
 go.lumeweb.com/portal v0.4.1 h1:Nz6Q2xeLOsjHZ5l01Xt0tKIGRIGkIsXOXZ+KSYWNP14=
 go.lumeweb.com/portal v0.4.1/go.mod h1:J8hK8Ka9ID3OekqizvE1ZomudY9CkAhAo3EKhWJJoa4=
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20241231150010-ecaedf54defd h1:6t1eBxLUlo/D7UEroh2rrEOM3vosKi7KVjDrYy7vurA=
