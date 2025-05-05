@@ -1,41 +1,32 @@
 package service
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/samber/lo"
-	"go.lumeweb.com/portal-plugin-dashboard/internal/api/messages"
-	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db"
+	"go.lumeweb.com/portal-middleware/auth/jwt"
+	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/db"
+	"go.lumeweb.com/portal/db/types"
+	"go.lumeweb.com/queryutil"
 	"go.uber.org/zap"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"time"
 )
-
-var allowedApiKeySortFields = []string{"id", "name", "created_at", "updated_at"}
 
 const API_KEY_SERVICE = "api_key"
 
-type Pagination struct {
-	Page     int
-	PageSize int
-}
-
-type Sorter struct {
-	Field string
-	Order string
-}
+var (
+	PurposeAPI jwt.Purpose = "api"
+)
 
 type APIKeyService interface {
 	core.Service
-	CreateAPIKey(userID uint, name string) (*messages.CreateAPIKeyResponse, error)
-	GetAPIKeys(userID uint, pagination *Pagination, filters map[string]interface{}, sorters []Sorter) (*messages.ListAPIKeyResponse, error)
+	CreateAPIKey(userID uint, name string) (*pluginDb.APIKey, error)
+	GetAPIKeys(userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.APIKey, int64, error)
 	DeleteAPIKey(userID uint, uuid uuid.UUID) error
-	ValidateAPIKey(key string) (*pluginDb.APIKey, error)
+	ValidateAPIKey(userID uint, keyUUID uuid.UUID) (*pluginDb.APIKey, error)
 }
 
 var _ APIKeyService = (*APIKeyServiceDefault)(nil)
@@ -68,23 +59,13 @@ func (s *APIKeyServiceDefault) ID() string {
 	return API_KEY_SERVICE
 }
 
-func (s *APIKeyServiceDefault) CreateAPIKey(userID uint, name string) (*messages.CreateAPIKeyResponse, error) {
-	key := make([]byte, 32)
-	_, err := rand.Read(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate API key: %w", err)
-	}
-
-	keyString := base64.URLEncoding.EncodeToString(key)
-
+func (s *APIKeyServiceDefault) CreateAPIKey(userID uint, name string) (*pluginDb.APIKey, error) {
 	apiKey := &pluginDb.APIKey{
-		UUID:   datatypes.NewBinUUIDv4(),
 		Name:   name,
 		UserID: userID,
-		Key:    keyString,
 	}
 
-	err = db.RetryableTransaction(s.ctx, s.db, func(tx *gorm.DB) *gorm.DB {
+	err := db.RetryableTransaction(s.ctx, s.db, func(tx *gorm.DB) *gorm.DB {
 		return tx.Create(apiKey)
 	})
 
@@ -93,50 +74,38 @@ func (s *APIKeyServiceDefault) CreateAPIKey(userID uint, name string) (*messages
 		return nil, fmt.Errorf("failed to create API key: %w", err)
 	}
 
-	return &messages.CreateAPIKeyResponse{Key: keyString}, nil
+	return apiKey, nil
 }
 
-func (s *APIKeyServiceDefault) GetAPIKeys(userID uint, pagination *Pagination, filters map[string]interface{}, sorters []Sorter) (*messages.ListAPIKeyResponse, error) {
-	var apiKeys []pluginDb.APIKey
+func (s *APIKeyServiceDefault) GetAPIKeys(userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.APIKey, int64, error) {
+	var apiKeys []*pluginDb.APIKey
 	var total int64
 
-	query := s.db.Model(&pluginDb.APIKey{}).Where("user_id = ?", userID)
+	query := s.db.Model(&pluginDb.APIKey{}).Where(&pluginDb.APIKey{UserID: userID})
 
-	// Apply scopes
-	query = query.Scopes(
-		paginationScope(pagination),
-		filterScope(filters),
-		sortScope(sorters),
-	)
+	// Apply filters, sorts and pagination using queryutil helpers
+	query = queryutil.ApplyFilters(query, filters, nil)
+	query = queryutil.ApplySort(query, sorts)
 
-	// Count total before pagination
 	if err := query.Count(&total).Error; err != nil {
 		s.logger.Error("failed to count API keys", zap.Error(err))
-		return nil, fmt.Errorf("failed to count API keys: %w", err)
+		return nil, 0, fmt.Errorf("failed to count API keys: %w", err)
 	}
 
-	// Execute the query
+	query = queryutil.ApplyPagination(query, pagination)
+
 	if err := query.Find(&apiKeys).Error; err != nil {
 		s.logger.Error("failed to fetch API keys", zap.Error(err))
-		return nil, fmt.Errorf("failed to fetch API keys: %w", err)
+		return nil, 0, fmt.Errorf("failed to fetch API keys: %w", err)
 	}
 
-	return &messages.ListAPIKeyResponse{
-		Data: lo.Map(apiKeys, func(key pluginDb.APIKey, _ int) messages.APIKey {
-			return messages.APIKey{
-				UUID:      uuid.UUID(key.UUID),
-				Name:      key.Name,
-				CreatedAt: key.CreatedAt,
-			}
-		}),
-		Total: total,
-	}, nil
+	return apiKeys, total, nil
 }
 
 func (s *APIKeyServiceDefault) DeleteAPIKey(userID uint, keyID uuid.UUID) error {
 	item := &pluginDb.APIKey{
 		UserID: userID,
-		UUID:   datatypes.BinUUID(keyID),
+		UUID:   types.FromUUID(keyID),
 	}
 
 	err := db.RetryableTransaction(s.ctx, s.db, func(tx *gorm.DB) *gorm.DB {
@@ -145,13 +114,16 @@ func (s *APIKeyServiceDefault) DeleteAPIKey(userID uint, keyID uuid.UUID) error 
 			return tx
 		}
 		if result.RowsAffected == 0 {
-			_ = tx.AddError(errors.New("API key not found or not owned by the user"))
+			_ = tx.AddError(gorm.ErrRecordNotFound)
 			return tx
 		}
 		return tx
 	})
 
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return gorm.ErrRecordNotFound
+		}
 		s.logger.Error("failed to delete API key", zap.Error(err))
 		return fmt.Errorf("failed to delete API key: %w", err)
 	}
@@ -159,54 +131,17 @@ func (s *APIKeyServiceDefault) DeleteAPIKey(userID uint, keyID uuid.UUID) error 
 	return nil
 }
 
-func (s *APIKeyServiceDefault) ValidateAPIKey(key string) (*pluginDb.APIKey, error) {
+func (s *APIKeyServiceDefault) ValidateAPIKey(userID uint, keyUUID uuid.UUID) (*pluginDb.APIKey, error) {
 	var apiKey pluginDb.APIKey
 
-	apiKey.Key = key
+	if err := s.db.Where(&pluginDb.APIKey{UUID: types.FromUUID(keyUUID), UserID: userID}).First(&apiKey).Error; err != nil {
+		return nil, fmt.Errorf("invalid api key")
+	}
 
-	err := db.RetryableTransaction(s.ctx, s.db, func(tx *gorm.DB) *gorm.DB {
-		return tx.Where(&apiKey).First(&apiKey)
-	})
-
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("invalid API key")
-		}
-		s.logger.Error("failed to validate API key", zap.Error(err))
-		return nil, fmt.Errorf("failed to validate API key: %w", err)
+	// Check if key has expired
+	if apiKey.Expires != nil && apiKey.Expires.Before(time.Now()) {
+		return nil, fmt.Errorf("invalid api key")
 	}
 
 	return &apiKey, nil
-}
-
-// GORM Scopes
-
-func paginationScope(p *Pagination) func(db *gorm.DB) *gorm.DB {
-	return func(db *gorm.DB) *gorm.DB {
-		if p != nil {
-			offset := (p.Page - 1) * p.PageSize
-			return db.Offset(offset).Limit(p.PageSize)
-		}
-		return db
-	}
-}
-
-func filterScope(filters map[string]interface{}) func(db *gorm.DB) *gorm.DB {
-	return func(db *gorm.DB) *gorm.DB {
-		for key, value := range filters {
-			db = db.Where(fmt.Sprintf("%s LIKE ?", key), fmt.Sprintf("%%%v%%", value))
-		}
-		return db
-	}
-}
-
-func sortScope(sorters []Sorter) func(db *gorm.DB) *gorm.DB {
-	return func(db *gorm.DB) *gorm.DB {
-		for _, sorter := range sorters {
-			if lo.Contains(allowedApiKeySortFields, sorter.Field) {
-				db = db.Order(fmt.Sprintf("%s %s", sorter.Field, sorter.Order))
-			}
-		}
-		return db
-	}
 }

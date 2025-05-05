@@ -1,0 +1,15 @@
+-- migrate:up
+CREATE TABLE IF NOT EXISTS api_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME NULL,
+    name VARCHAR(255) NOT NULL,
+    uuid BLOB UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    expires DATETIME NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- migrate:down
+DROP TABLE api_keys;

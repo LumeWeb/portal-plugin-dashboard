@@ -3,14 +3,16 @@ package dashboard
 import (
 	"embed"
 	_ "embed"
+	"fmt"
 	"go.lumeweb.com/portal-plugin-dashboard/build"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api"
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
-	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	pluginService "go.lumeweb.com/portal-plugin-dashboard/internal/service"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db/migrations"
 	"go.lumeweb.com/portal/service"
 )
 
@@ -28,13 +30,20 @@ func init() {
 		Version: build.GetInfo(),
 		Meta: func(ctx core.Context, builder core.PortalMetaBuilder) error {
 			pluginCfg := ctx.Config().GetPlugin(internal.PLUGIN_NAME).API.(*pluginConfig.APIConfig)
-			if pluginCfg.SocialLogin.Enabled {
-				builder.AddFeatureFlag("social_login", true)
-				builder.AddPluginMeta(internal.PLUGIN_NAME, "social_providers", provider.EnabledProviders())
+
+			// Get the plugin builder for the dashboard plugin using the new Plugin method
+			pluginBuilder, err := builder.Plugin(internal.PLUGIN_NAME)
+			if err != nil {
+				return fmt.Errorf("failed to get plugin meta builder for dashboard: %w", err)
 			}
 
-			builder.AddPluginMeta(internal.PLUGIN_NAME, "subdomain", pluginCfg.Subdomain)
-			builder.AddPluginMeta(internal.PLUGIN_NAME, "themes", pluginCfg.Themes)
+			if pluginCfg.SocialLogin.Enabled {
+				builder.AddFeatureFlag("social_login", true)
+				pluginBuilder.AddMeta("social_providers", provider.EnabledProviders())
+			}
+
+			pluginBuilder.AddMeta("subdomain", pluginCfg.Subdomain)
+			pluginBuilder.AddMeta("themes", pluginCfg.Themes)
 			return nil
 		},
 		API: func() (core.API, []core.ContextBuilderOption, error) {
@@ -52,7 +61,12 @@ func init() {
 			}, nil
 		},
 		Models: []any{
-			&pluginDb.APIKey{},
+			&models.APIKey{},
+		},
+
+		Migrations: core.DBMigration{
+			core.DB_TYPE_MYSQL:  migrations.GetMySQL(),
+			core.DB_TYPE_SQLITE: migrations.GetSQLite(),
 		},
 		MailerTemplates: templates,
 	})
