@@ -29,18 +29,18 @@ func (c Color) Validate() error {
 }
 
 type SystemColors struct {
-	Background           Color `config:"background" json:"system-color-1" yaml:"background"`
-	SubtleBackground     Color `config:"subtle_background" json:"system-color-2" yaml:"subtle_background"`
-	UIElementBackground  Color `config:"ui_element_background" json:"system-color-3" yaml:"ui_element_background"`
-	HoveredUIElement     Color `config:"hovered_ui_element" json:"system-color-4" yaml:"hovered_ui_element"`
-	ActiveUIElement      Color `config:"active_ui_element" json:"system-color-5" yaml:"active_ui_element"`
-	Borders              Color `config:"borders" json:"system-color-6" yaml:"borders"`
-	UIElementBorder      Color `config:"ui_element_border" json:"system-color-7" yaml:"ui_element_border"`
-	HoveredElementBorder Color `config:"hovered_element_border" json:"system-color-8" yaml:"hovered_element_border"`
-	SolidBackground      Color `config:"solid_background" json:"system-color-9" yaml:"solid_background"`
-	HoveredSolidBg       Color `config:"hovered_solid_bg" json:"system-color-10" yaml:"hovered_solid_bg"`
-	LowContrastText      Color `config:"low_contrast_text" json:"system-color-11" yaml:"low_contrast_text"`
-	HighContrastText     Color `config:"high_contrast_text" json:"system-color-12" yaml:"high_contrast_text"`
+	Background           Color `config:"background" json:"background" yaml:"background"`
+	SubtleBackground     Color `config:"subtle_background" json:"subtle_background" yaml:"subtle_background"`
+	UIElementBackground  Color `config:"ui_element_background" json:"ui_element_background" yaml:"ui_element_background"`
+	HoveredUIElement     Color `config:"hovered_ui_element" json:"hovered_ui_element" yaml:"hovered_ui_element"`
+	ActiveUIElement      Color `config:"active_ui_element" json:"active_ui_element" yaml:"active_ui_element"`
+	Borders              Color `config:"borders" json:"borders" yaml:"borders"`
+	UIElementBorder      Color `config:"ui_element_border" json:"ui_element_border" yaml:"ui_element_border"`
+	HoveredElementBorder Color `config:"hovered_element_border" json:"hovered_element_border" yaml:"hovered_element_border"`
+	SolidBackground      Color `config:"solid_background" json:"solid_background" yaml:"solid_background"`
+	HoveredSolidBg       Color `config:"hovered_solid_bg" json:"hovered_solid_bg" yaml:"hovered_solid_bg"`
+	LowContrastText      Color `config:"low_contrast_text" json:"low_contrast_text" yaml:"low_contrast_text"`
+	HighContrastText     Color `config:"high_contrast_text" json:"high_contrast_text" yaml:"high_contrast_text"`
 }
 
 type BackgroundImages struct {

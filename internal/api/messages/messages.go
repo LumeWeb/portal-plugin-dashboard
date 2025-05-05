@@ -95,7 +95,9 @@ type ListAPIKeyResponse struct {
 }
 
 type CreateAPIKeyResponse struct {
-	Key string `json:"key"`
+	Token string           `json:"token"`
+	UUID  types.BinaryUUID `json:"uuid"`
+	Name  string           `json:"name"`
 }
 type AccountPermissionsResponse struct {
 	Permissions []*core.AccessPolicy `json:"permissions"`

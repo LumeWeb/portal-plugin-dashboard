@@ -1,0 +1,8 @@
+template: testify
+template-data:
+  unroll-variadic: true
+filename: "{{.InterfaceName}}.go"
+packages:
+  go.lumeweb.com/portal-plugin-dashboard/internal/service:
+    interfaces:
+      APIKeyService: {}
