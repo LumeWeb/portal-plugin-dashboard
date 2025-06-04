@@ -23,7 +23,7 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/messages"
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
-	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db"
+	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	_ "go.lumeweb.com/portal-plugin-dashboard/internal/provider/providers"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/service"
