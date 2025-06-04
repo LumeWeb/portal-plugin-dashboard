@@ -6,6 +6,7 @@ toolchain go1.23.2
 
 require (
 	github.com/Oudwins/zog v0.18.4
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/labstack/echo/v4 v4.13.4
@@ -18,7 +19,7 @@ require (
 	go.lumeweb.com/portal v0.4.2-0.20250603120926-b928d5083d7f
 	go.lumeweb.com/portal-middleware v0.2.7
 	go.lumeweb.com/portal-router v0.5.0
-	go.lumeweb.com/queryutil v0.3.3
+	go.lumeweb.com/queryutil v0.3.5
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250531060339-104c4db9a6e6
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.38.0
@@ -84,7 +85,6 @@ require (
 	github.com/go-sql-driver/mysql v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect

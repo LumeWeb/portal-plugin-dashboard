@@ -21,7 +21,6 @@ import (
 	"go.lumeweb.com/portal-middleware/middleware"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
-	"go.lumeweb.com/portal-plugin-dashboard/internal/api/messages"
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
@@ -37,6 +36,7 @@ import (
 	portal_dashboard "go.lumeweb.com/web/go/portal-dashboard"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/hkdf"
+	"gorm.io/gorm"
 	"io"
 	"net/http"
 	"net/url"
@@ -333,10 +333,11 @@ func (a *API) otpValidate(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	var request messages.OTPValidateRequest
-	err := ctx.Decode(&request)
-	if err != nil {
-		return err
+	var request dto.OTPValidateRequest
+
+	_, ok = httputil.DecodeAndValidateRequest[*dto.OTPValidateRequest, *dto.OTPValidateRequest](ctx, &request)
+	if !ok {
+		return nil // Error handled by DecodeAndValidateRequest
 	}
 
 	_jwt, err := a.auth.LoginOTP(user, request.OTP)
@@ -361,7 +362,7 @@ func (a *API) otpDisable(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	var request messages.OTPDisableRequest
+	var request dto.OTPDisableRequest
 	err := ctx.Decode(&request)
 	if err != nil {
 		return err
@@ -435,7 +436,9 @@ func (a *API) passwordResetConfirm(c echo.Context) error {
 	}
 
 	err = a.password.ResetPassword(requestDto.Email, requestDto.Token, requestDto.Password)
-	if err != nil {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ctx.Error(errors.New("API key not found"), http.StatusNotFound)
+	} else if err != nil {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -453,11 +456,11 @@ func (a *API) ping(c echo.Context) error {
 	adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider()).EchoAuthCookie(c.Response(), c.Request())
 	jwt.SendHeader(c.Response(), token)
 
-	response := &messages.PongResponse{
+	response := &dto.PongResponse{
 		Ping:  "pong",
 		Token: token,
 	}
-	return ctx.Encode(response)
+	return httputil.EncodeResponse(ctx, response, response)
 }
 
 func (a *API) rootAuthComplete(c echo.Context) error {
@@ -479,11 +482,7 @@ func (a *API) rootAuthComplete(c echo.Context) error {
 	}
 
 	if !exists {
-		if err != nil {
-			loginFailed(ctx, errors.New(""))
-		}
-		err := core.NewAccountError(core.ErrKeyInvalidLogin, nil)
-		return ctx.Error(err, http.StatusUnauthorized)
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
 	returnUrl := c.QueryParam("return")
@@ -822,6 +821,9 @@ func (a *API) deleteAPIKey(c echo.Context) error {
 
 	err = a.apiKey.DeleteAPIKey(user, keyID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ctx.Error(err, http.StatusNotFound)
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -907,7 +909,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Register a new account"),
 				router.WithDescription("Creates a new user account with email and password."),
-				router.WithRequestBody(messages.RegisterRequest{}, "Registration details", true),
+				router.WithRequestBody(dto.RegisterRequest{}, "Registration details", true),
 				router.WithSuccessResponse(http.StatusOK, "Account created successfully"),
 				router.WithErrorResponses(accountErrorResponses(
 					core.NewAccountError(core.ErrKeyAccountCreationFailed, nil),
@@ -921,9 +923,9 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Login with email and password"),
 				router.WithDescription("Authenticates a user using email and password."),
-				router.WithRequestBody(messages.LoginRequest{}, "Login credentials", true),
+				router.WithRequestBody(dto.LoginRequest{}, "Login credentials", true),
 				router.WithSuccessResponse(http.StatusOK, "OTP required",
-					router.WithJSONContent(messages.LoginResponse{}),
+					router.WithJSONContent(dto.LoginResponse{}),
 				),
 				router.WithSuccessResponse(http.StatusFound, "Redirect to auth complete (for non-OTP)",
 					router.WithHeader("Location", "URL to redirect to"),
@@ -954,7 +956,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 				router.WithSummary("Ping authenticated endpoint"),
 				router.WithDescription("Checks if the user is authenticated and returns a pong response."),
 				router.WithSuccessResponse(http.StatusOK, "Authenticated",
-					router.WithJSONContent(messages.PongResponse{}),
+					router.WithJSONContent(dto.PongResponse{}),
 				),
 				router.WithErrorResponses(accountErrorResponses(
 					core.NewAccountError(core.ErrKeyInvalidLogin, nil),
@@ -970,7 +972,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 				router.WithDescription("Exchanges an API key for a JWT."),
 				router.WithHeaderParam("Authorization", "API Key followed by the key", "APIKey <your_key>"),
 				router.WithSuccessResponse(http.StatusOK, "JWT issued",
-					router.WithJSONContent(messages.LoginResponse{}),
+					router.WithJSONContent(dto.LoginResponse{}),
 				),
 				router.WithErrorResponses(router.DefineSwaggerErrorResponses(
 					router.DefineSwaggerErrorResponse(http.StatusUnauthorized, core.NewAccountError(core.ErrKeyInvalidLogin, nil).Message),
@@ -986,7 +988,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 				router.WithSummary("Generate OTP secret"),
 				router.WithDescription("Generates a new OTP secret for the authenticated user."),
 				router.WithSuccessResponse(http.StatusOK, "OTP secret generated",
-					router.WithJSONContent(messages.OTPGenerateResponse{}),
+					router.WithJSONContent(dto.OTPGenerateResponse{}),
 				),
 				router.WithErrorResponses(router.DefineSwaggerErrorResponses(
 					router.DefineSwaggerErrorResponse(http.StatusUnauthorized, core.NewAccountError(core.ErrKeyInvalidLogin, nil).Message),
@@ -1000,7 +1002,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Validate OTP code"),
 				router.WithDescription("Validates an OTP code to complete 2FA login."),
-				router.WithRequestBody(messages.OTPValidateRequest{}, "OTP code", true),
+				router.WithRequestBody(dto.OTPValidateRequest{}, "OTP code", true),
 				router.WithSuccessResponse(http.StatusFound, "Redirect to auth complete (on success)",
 					router.WithHeader("Location", "URL to redirect to"),
 				),
@@ -1017,7 +1019,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Verify and enable OTP"),
 				router.WithDescription("Verifies an OTP code and enables 2FA for the authenticated user."),
-				router.WithRequestBody(messages.OTPVerifyRequest{}, "OTP code", true),
+				router.WithRequestBody(dto.OTPVerifyRequest{}, "OTP code", true),
 				router.WithResponseHeaders(http.StatusOK, "OTP verified and enabled", nil, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
@@ -1027,7 +1029,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Disable OTP"),
 				router.WithDescription("Disables 2FA for the authenticated user."),
-				router.WithRequestBody(messages.OTPDisableRequest{}, "Current password", true),
+				router.WithRequestBody(dto.OTPDisableRequest{}, "Current password", true),
 				router.WithResponseHeaders(http.StatusOK, "OTP disabled", nil, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
@@ -1038,7 +1040,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 				router.WithSummary("Get account information"),
 				router.WithDescription("Retrieves information about the authenticated user's account."),
 				router.WithSuccessResponse(http.StatusOK, "Account information",
-					router.WithJSONContent(messages.AccountInfoResponse{}),
+					router.WithJSONContent(dto.AccountInfoResponse{}),
 				),
 				router.WithErrorResponses(router.DefineSwaggerErrorResponses(
 					router.DefineSwaggerErrorResponse(http.StatusUnauthorized, "Not authenticated"),
@@ -1053,7 +1055,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Get account permissions"),
 				router.WithDescription("Retrieves the access control policies and model for the authenticated user."),
-				router.WithResponseHeaders(http.StatusOK, "Account permissions", map[string]swagger.Schema{"application/json": {Value: messages.AccountPermissionsResponse{}}}, nil),
+				router.WithResponseHeaders(http.StatusOK, "Account permissions", map[string]swagger.Schema{"application/json": {Value: dto.AccountPermissionsResponse{}}}, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),
@@ -1062,7 +1064,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Verify email address"),
 				router.WithDescription("Verifies a user's email address using a token sent via email."),
-				router.WithRequestBody(messages.VerifyEmailRequest{}, "Email and verification token", true),
+				router.WithRequestBody(dto.VerifyEmailRequest{}, "Email and verification token", true),
 				router.WithResponseHeaders(http.StatusOK, "Email verified successfully", nil, nil),
 			),
 			router.WithAccess(""),
@@ -1071,7 +1073,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Resend email verification"),
 				router.WithDescription("Resends the email verification link to the user's email address."),
-				router.WithRequestBody(messages.ResendVerifyEmailRequest{}, "Email address", true),
+				router.WithRequestBody(dto.ResendVerifyEmailRequest{}, "Email address", true),
 				router.WithResponseHeaders(http.StatusOK, "Verification email sent (if account exists and is not verified)", nil, nil),
 			),
 			router.WithAccess(""),
@@ -1080,7 +1082,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Update email address"),
 				router.WithDescription("Updates the authenticated user's email address."),
-				router.WithRequestBody(messages.UpdateEmailRequest{}, "New email and current password", true),
+				router.WithRequestBody(dto.UpdateEmailRequest{}, "New email and current password", true),
 				router.WithResponseHeaders(http.StatusOK, "Email updated successfully", nil, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
@@ -1090,7 +1092,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Update password"),
 				router.WithDescription("Updates the authenticated user's password."),
-				router.WithRequestBody(messages.UpdatePasswordRequest{}, "Current and new passwords", true),
+				router.WithRequestBody(dto.UpdatePasswordRequest{}, "Current and new passwords", true),
 				router.WithResponseHeaders(http.StatusOK, "Password updated successfully", nil, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
@@ -1100,7 +1102,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Request password reset"),
 				router.WithDescription("Initiates the password reset process by sending a reset link to the user's email."),
-				router.WithRequestBody(messages.PasswordResetRequest{}, "Email address", true),
+				router.WithRequestBody(dto.PasswordResetRequest{}, "Email address", true),
 				router.WithSuccessResponse(http.StatusOK, "Password reset email sent (if account exists)"),
 				router.WithErrorResponses(router.DefineSwaggerErrorResponses(
 					router.DefineSwaggerErrorResponse(http.StatusBadRequest, core.NewAccountError(core.ErrKeyInvalidLogin, nil).Message),
@@ -1113,7 +1115,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Confirm password reset"),
 				router.WithDescription("Resets the user's password using a token received via email."),
-				router.WithRequestBody(messages.PasswordResetVerifyRequest{}, "Email, token, and new password", true),
+				router.WithRequestBody(dto.PasswordResetVerifyRequest{}, "Email, token, and new password", true),
 				router.WithResponseHeaders(http.StatusOK, "Password reset successfully", nil, nil),
 			),
 			router.WithAccess(""),
@@ -1131,8 +1133,8 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Create API Key"),
 				router.WithDescription("Creates a new API key for the authenticated user."),
-				router.WithRequestBody(messages.APIKeyCreateRequest{}, "API Key name", true),
-				router.WithResponseHeaders(http.StatusOK, "API Key created", map[string]swagger.Schema{"application/json": {Value: messages.CreateAPIKeyResponse{}}}, nil),
+				router.WithRequestBody(dto.APIKeyCreateRequest{}, "API Key name", true),
+				router.WithResponseHeaders(http.StatusOK, "API Key created", map[string]swagger.Schema{"application/json": {Value: dto.CreateAPIKeyResponse{}}}, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),
@@ -1144,7 +1146,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 				router.WithPaginationParams(),
 				router.WithResponseHeaders(http.StatusOK, "List of API Keys", map[string]swagger.Schema{
 					"application/json": {
-						Value: &messages.ListAPIKeyResponse{},
+						Value: queryutil.Response[*pluginDb.APIKey]{},
 					},
 				}, nil),
 			),
@@ -1165,7 +1167,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithSwaggerOptions(
 				router.WithSummary("Get upload limit"),
 				router.WithDescription("Retrieves the maximum allowed upload size."),
-				router.WithResponseHeaders(http.StatusOK, "Upload limit", map[string]swagger.Schema{"application/json": {Value: messages.UploadLimitResponse{}}}, nil),
+				router.WithResponseHeaders(http.StatusOK, "Upload limit", map[string]swagger.Schema{"application/json": {Value: dto.UploadLimitResponse{}}}, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),
