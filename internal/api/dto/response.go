@@ -2,13 +2,12 @@ package dto
 
 import (
 	z "github.com/Oudwins/zog"
-	"go.lumeweb.com/portal-plugin-dashboard/internal/db"
 	"go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/portal/db/types"
 	"time"
 
 	"go.lumeweb.com/httputil"
-	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db"
+	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 )
 
@@ -16,8 +15,8 @@ var (
 	_ httputil.DTOResponse[*PongResponse]        = (*PongResponse)(nil)
 	_ httputil.DTOResponse[*models.User]         = (*AccountInfoResponse)(nil)
 	_ httputil.DTOResponse[*UploadLimitResponse] = (*UploadLimitResponse)(nil)
-	_ httputil.DTOResponse[*db.APIKey]           = (*APIKeyResponse)(nil)
-	_ httputil.DTOResponse[*db.APIKey]           = (*CreateAPIKeyResponse)(nil)
+	_ httputil.DTOResponse[*pluginDb.APIKey]     = (*APIKeyResponse)(nil)
+	_ httputil.DTOResponse[*pluginDb.APIKey]     = (*CreateAPIKeyResponse)(nil)
 	_ httputil.DTOResponse[PermissionsModel]     = (*AccountPermissionsResponse)(nil)
 	_ httputil.DTOValidator                      = (*APIKeyCreateRequest)(nil)
 	_ httputil.DTORequest[*APIKeyCreateRequest]  = (*APIKeyCreateRequest)(nil)
@@ -82,16 +81,11 @@ type APIKeyResponse struct {
 	CreatedAt time.Time        `json:"created_at"`
 }
 
-func (r *APIKeyResponse) FromModel(key *db.APIKey) error {
+func (r *APIKeyResponse) FromModel(key *pluginDb.APIKey) error {
 	r.UUID = key.UUID
 	r.Name = key.Name
 	r.CreatedAt = key.CreatedAt
 	return nil
-}
-
-type APIKeyListModel struct {
-	Data  []*db.APIKey
-	Total int64
 }
 
 type CreateAPIKeyResponse struct {
