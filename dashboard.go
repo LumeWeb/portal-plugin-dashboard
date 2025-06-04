@@ -8,11 +8,11 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api"
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/db/migrations"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	pluginService "go.lumeweb.com/portal-plugin-dashboard/internal/service"
 	"go.lumeweb.com/portal/core"
-	"go.lumeweb.com/portal/db/migrations"
 	"go.lumeweb.com/portal/service"
 )
 
