@@ -1146,7 +1146,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 				router.WithPaginationParams(),
 				router.WithResponseHeaders(http.StatusOK, "List of API Keys", map[string]swagger.Schema{
 					"application/json": {
-						Value: queryutil.Response[*pluginDb.APIKey]{},
+						Value: queryutil.Response[*dto.APIKeyResponse]{},
 					},
 				}, nil),
 			),
