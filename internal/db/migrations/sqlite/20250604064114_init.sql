@@ -6,9 +6,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
     deleted_at DATETIME NULL,
     name VARCHAR(255) NOT NULL,
     uuid BLOB UNIQUE NOT NULL,
-    user_id INTEGER NOT NULL,
-    expires DATETIME NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE
+    user_id INTEGER NOT NULL REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    expires DATETIME NULL
 );
 
 -- migrate:down
