@@ -1186,7 +1186,6 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 
 	httpService := core.GetService[core.HTTPService](a.ctx, core.HTTP_SERVICE)
 	mainRootRouter := httpService.Router()
-	mainRootRouter.Use(echo.WrapMiddleware(corsHandler))
 
 	rootRoutes := router.DefineRoutes(
 		router.NewRoute(http.MethodGet, "/api/auth/complete", a.rootAuthComplete,
@@ -1200,7 +1199,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		),
 	)
 
-	if err := router.RegisterRoutes(mainRootRouter, accessSvc, "", rootRoutes); err != nil {
+	if err := router.RegisterRoutes(mainRootRouter, accessSvc, "", rootRoutes, echo.WrapMiddleware(corsHandler), authMw); err != nil {
 		return fmt.Errorf("failed to register root auth complete route: %w", err)
 	}
 
