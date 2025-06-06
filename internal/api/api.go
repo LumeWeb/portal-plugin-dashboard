@@ -1197,7 +1197,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		),
 	)
 
-	if err := router.RegisterRoutes(mainRootRouter, accessSvc, "", rootRoutes, router.WithMiddlewares(authMw)); err != nil {
+	if err := router.RegisterRoutes(mainRootRouter, accessSvc, "", rootRoutes, router.WithMiddlewares(authMw), router.WithCors()); err != nil {
 		return fmt.Errorf("failed to register root auth complete route: %w", err)
 	}
 
