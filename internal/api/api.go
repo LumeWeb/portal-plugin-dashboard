@@ -17,7 +17,6 @@ import (
 	"go.lumeweb.com/portal-middleware/auth/adapter"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	mcontext "go.lumeweb.com/portal-middleware/context"
-	"go.lumeweb.com/portal-middleware/cors"
 	"go.lumeweb.com/portal-middleware/middleware"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
@@ -898,7 +897,6 @@ func (a *API) deleteAccount(c echo.Context) error {
 func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) error {
 	pluginCfg := a.config.GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 
-	corsHandler := cors.NewWithDefaults(cors.Config{})
 	loginAuthMw2fa := middleware.AuthMiddleware(a.ctx, jwt.Purpose2FA)
 	verifyApiKey := middleware.AuthMiddleware(a.ctx, jwt.Purpose2FA)
 	authMw := middleware.AuthMiddleware(a.ctx, jwt.PurposeLogin)
@@ -1174,7 +1172,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		),
 	)
 
-	if err := router.RegisterRoutes(gRouter, accessSvc, a.Subdomain(), routes, echo.WrapMiddleware(corsHandler)); err != nil {
+	if err := router.RegisterRoutes(gRouter, accessSvc, a.Subdomain(), routes, router.WithCors()); err != nil {
 		return fmt.Errorf("failed to register API routes: %w", err)
 	}
 
@@ -1199,7 +1197,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		),
 	)
 
-	if err := router.RegisterRoutes(mainRootRouter, accessSvc, "", rootRoutes, echo.WrapMiddleware(corsHandler), authMw); err != nil {
+	if err := router.RegisterRoutes(mainRootRouter, accessSvc, "", rootRoutes, router.WithMiddlewares(authMw)); err != nil {
 		return fmt.Errorf("failed to register root auth complete route: %w", err)
 	}
 

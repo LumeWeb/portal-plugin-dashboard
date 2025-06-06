@@ -14,11 +14,11 @@ require (
 	github.com/samber/lo v1.49.1
 	github.com/sethvargo/go-password v0.3.1
 	github.com/stretchr/testify v1.10.0
-	go.lumeweb.com/gswagger v0.20.5
+	go.lumeweb.com/gswagger v0.20.6
 	go.lumeweb.com/httputil v0.5.1
 	go.lumeweb.com/portal v0.4.2-0.20250603120926-b928d5083d7f
 	go.lumeweb.com/portal-middleware v0.2.7
-	go.lumeweb.com/portal-router v0.5.0
+	go.lumeweb.com/portal-router v0.6.0
 	go.lumeweb.com/queryutil v0.3.5
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250531060339-104c4db9a6e6
 	go.uber.org/zap v1.27.0
