@@ -29,7 +29,7 @@ func init() {
 		ID:      internal.PLUGIN_NAME,
 		Version: build.GetInfo(),
 		Meta: func(ctx core.Context, builder core.PortalMetaBuilder) error {
-			pluginCfg := ctx.Config().GetPlugin(internal.PLUGIN_NAME).API.(*pluginConfig.APIConfig)
+			pluginCfg := ctx.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 
 			// Get the plugin builder for the dashboard plugin using the new Plugin method
 			pluginBuilder, err := builder.Plugin(internal.PLUGIN_NAME)
