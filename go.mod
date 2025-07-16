@@ -18,7 +18,7 @@ require (
 	go.lumeweb.com/portal-middleware v0.2.9
 	go.lumeweb.com/portal-router v0.6.1
 	go.lumeweb.com/queryutil v0.3.12
-	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250716054355-44463d395b11
+	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250716195135-041ad543552c
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.40.0
 	gorm.io/gorm v1.30.0
