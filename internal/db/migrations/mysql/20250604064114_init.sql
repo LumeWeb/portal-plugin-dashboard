@@ -1,4 +1,5 @@
--- migrate:up
+-- +goose Up
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS api_keys (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -10,6 +11,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
     expires TIMESTAMP NULL,
     CONSTRAINT fk_api_keys_user FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE
 );
+-- +goose StatementEnd
 
--- migrate:down
+-- +goose Down
+-- +goose StatementBegin
 DROP TABLE api_keys;
+-- +goose StatementEnd
