@@ -1,13 +1,14 @@
 package config
 
 import (
-	"errors"
 	"fmt"
+	z "github.com/Oudwins/zog"
+	"github.com/Oudwins/zog/internals"
 	"go.lumeweb.com/portal/config"
 )
 
-var _ config.Validator = (*Theme)(nil)
-var _ config.Validator = (*Color)(nil)
+var _ config.ConfigSchemaProvider = (*Theme)(nil)
+var _ config.ConfigSchemaProvider = (*Color)(nil)
 
 type Color struct {
 	Hue        int `config:"hue" json:"hue"`
@@ -15,17 +16,18 @@ type Color struct {
 	Lightness  int `config:"lightness" json:"lightness"`
 }
 
-func (c Color) Validate() error {
-	if c.Hue < 0 || c.Hue > 360 {
-		return fmt.Errorf("hue must be between 0 and 360, got %d", c.Hue)
-	}
-	if c.Saturation < 0 || c.Saturation > 100 {
-		return fmt.Errorf("saturation must be between 0 and 100, got %d", c.Saturation)
-	}
-	if c.Lightness < 0 || c.Lightness > 100 {
-		return fmt.Errorf("lightness must be between 0 and 100, got %d", c.Lightness)
-	}
-	return nil
+func (c Color) Schema() z.ZogSchema {
+	return z.Struct(z.Shape{
+		"Hue": z.Uint().Required(z.MessageFunc(func(e *internals.ZogIssue, p internals.Ctx) {
+			_ = e.SetMessage(fmt.Sprintf("hue must be between 0 and 360, got %d", e.Value))
+		})).GTE(0).LTE(360),
+		"Saturation": z.Uint().Required(z.MessageFunc(func(e *internals.ZogIssue, p internals.Ctx) {
+			_ = e.SetMessage(fmt.Sprintf("saturation must be between 0 and 100, got %d", e.Value))
+		})).Required().GTE(0).LTE(100),
+		"Lightness": z.Uint().Required(z.MessageFunc(func(e *internals.ZogIssue, p internals.Ctx) {
+			_ = e.SetMessage(fmt.Sprintf("lightness must be between 0 and 100, got %d", e.Value))
+		})).Required().GTE(0).LTE(100),
+	})
 }
 
 type SystemColors struct {
@@ -57,11 +59,10 @@ type Theme struct {
 	Default          bool             `config:"default" json:"default" yaml:"default"`
 }
 
-func (t Theme) Validate() error {
-	if t.Name == "" {
-		return errors.New("theme name is required")
-	}
-	return nil
+func (t Theme) Schema() z.ZogSchema {
+	return z.Struct(z.Shape{
+		"Name": z.String().Required(z.Message("theme name is required")),
+	})
 }
 
 func defaultThemeConfig() []Theme {

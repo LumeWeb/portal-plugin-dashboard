@@ -1,12 +1,12 @@
 package config
 
 import (
-	"errors"
+	z "github.com/Oudwins/zog"
+	"github.com/Oudwins/zog/internals"
 	"go.lumeweb.com/portal/config"
 )
 
 var _ config.APIConfig = (*APIConfig)(nil)
-var _ config.Validator = (*Themes)(nil)
 
 type Themes []Theme
 
@@ -17,22 +17,29 @@ type APIConfig struct {
 	Themes      Themes      `config:"themes"`
 }
 
-func (A APIConfig) Defaults() map[string]any {
-	return map[string]any{
-		"subdomain": "account",
-		"themes":    defaultThemeConfig(),
-	}
+func (a APIConfig) Schema() z.ZogSchema {
+	return z.Struct(z.Shape{
+		"Subdomain": z.String().Required(),
+		"AppFolder": z.String(),
+		"Themes": z.Slice(z.Struct(z.Shape{})).TestFunc(func(val any, ctx internals.Ctx) bool {
+			def := false
+			for _, theme := range val.(Themes) {
+				if theme.Default {
+					if def {
+						ctx.AddIssue(ctx.Issue().SetMessage("only one theme can be default"))
+						return false
+					}
+					def = true
+				}
+			}
+			return true
+		}),
+	})
 }
 
-func (t Themes) Validate() error {
-	def := false
-	for _, theme := range t {
-		if theme.Default {
-			if def {
-				return errors.New("only one theme can be default")
-			}
-			def = true
-		}
+func (A APIConfig) Defaults() map[string]any {
+	return map[string]any{
+		"Subdomain": "account",
+		"Themes":    defaultThemeConfig(),
 	}
-	return nil
 }
