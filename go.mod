@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.lumeweb.com/gswagger v0.20.8
 	go.lumeweb.com/httputil v0.5.3
-	go.lumeweb.com/portal v0.4.2-0.20250716055805-6d3493e7f986
+	go.lumeweb.com/portal v0.4.2-0.20250716115516-315a9f33ba90
 	go.lumeweb.com/portal-middleware v0.2.9
 	go.lumeweb.com/portal-router v0.6.1
 	go.lumeweb.com/queryutil v0.3.12
@@ -79,7 +79,6 @@ require (
 	github.com/go-gorm/caches/v4 v4.0.5 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
-	github.com/go-redsync/redsync/v4 v4.13.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -90,8 +89,6 @@ require (
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gotd/contrib v0.21.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hbollon/go-edlib v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/ipfs/go-cid v0.5.0 // indirect
@@ -166,7 +163,7 @@ require (
 	go.lumeweb.com/configmanager v0.3.16 // indirect
 	go.lumeweb.com/event/v2 v2.1.0 // indirect
 	go.shabbyrobe.org/gocovmerge v0.0.0-20230507111327-fa4f82cfbf4d // indirect
-	go.sia.tech/core v0.14.2 // indirect
+	go.sia.tech/core v0.14.1 // indirect
 	go.sia.tech/coreutils v0.16.5 // indirect
 	go.sia.tech/jape v0.14.0 // indirect
 	go.sia.tech/mux v1.4.0 // indirect
