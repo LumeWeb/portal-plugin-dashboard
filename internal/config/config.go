@@ -4,6 +4,7 @@ import (
 	z "github.com/Oudwins/zog"
 	"github.com/Oudwins/zog/internals"
 	"go.lumeweb.com/portal/config"
+	"reflect"
 )
 
 var _ config.APIConfig = (*APIConfig)(nil)
@@ -23,7 +24,7 @@ func (a APIConfig) Schema() z.ZogSchema {
 		"AppFolder": z.String(),
 		"Themes": z.Slice(z.Struct(z.Shape{})).TestFunc(func(val any, ctx internals.Ctx) bool {
 			def := false
-			for _, theme := range val.(Themes) {
+			for _, theme := range reflect.ValueOf(val).Elem().Interface().(Themes) {
 				if theme.Default {
 					if def {
 						ctx.AddIssue(ctx.Issue().SetMessage("only one theme can be default"))
