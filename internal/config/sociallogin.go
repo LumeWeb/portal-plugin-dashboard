@@ -12,6 +12,6 @@ type SocialLogin struct {
 
 func (A SocialLogin) Defaults() map[string]any {
 	return map[string]any{
-		"enabled": false,
+		"Enabled": false,
 	}
 }
