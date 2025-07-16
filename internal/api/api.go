@@ -93,7 +93,7 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			return nil
 		}),
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			err := event.FireUseServicerSubdomainSetEvent(ctx, api.Subdomain())
+			err := core.Fire(ctx, event.EVENT_USER_SERVICE_SUBDOMAIN_SET, event.NewUserServiceSubdomainSetEvent(api.Subdomain()))
 			if err != nil {
 				return err
 			}
@@ -1277,7 +1277,7 @@ func loginFailed(ctx httputil.RequestContext, err error) {
 	_ = ctx.Error(err, http.StatusUnauthorized)
 }
 
-func accountErrorResponses(errors ...*core.AccountError) map[int]swagger.ContentValue {
+func accountErrorResponses(errors ...*core.Error) map[int]swagger.ContentValue {
 	resp := make(map[int]swagger.ContentValue)
 	for _, err := range errors {
 		resp = router.MergeResponses(resp, router.DefineSwaggerErrorResponse(err.HttpStatus(), err))
