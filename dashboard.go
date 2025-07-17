@@ -14,6 +14,7 @@ import (
 	pluginService "go.lumeweb.com/portal-plugin-dashboard/internal/service"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/service"
+	"go.lumeweb.com/web/go/portal-plugin-dashboard"
 )
 
 //go:embed templates/*
@@ -69,5 +70,6 @@ func init() {
 			core.DB_TYPE_SQLITE: migrations.GetSQLite(),
 		},
 		MailerTemplates: templates,
+		WebBundles:      core.NewWebBundles(core.NewWebBundle(portal_plugin_dashboard.GetFS(), core.WithWebBundleTargetApps("dashboard"))),
 	})
 }
