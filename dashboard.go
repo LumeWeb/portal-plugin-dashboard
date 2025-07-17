@@ -29,6 +29,7 @@ func init() {
 	core.RegisterPlugin(core.PluginInfo{
 		ID:      internal.PLUGIN_NAME,
 		Version: build.GetInfo(),
+		Depends: []string{"core"},
 		Meta: func(ctx core.Context, builder core.PortalMetaBuilder) error {
 			pluginCfg := ctx.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 
