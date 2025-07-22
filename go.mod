@@ -14,9 +14,9 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.lumeweb.com/gswagger v0.20.8
 	go.lumeweb.com/httputil v0.5.3
-	go.lumeweb.com/portal v0.4.2-0.20250718043713-9227cf38485b
+	go.lumeweb.com/portal v0.4.2-0.20250722101051-5fa1cb4088aa
 	go.lumeweb.com/portal-middleware v0.2.9
-	go.lumeweb.com/portal-router v0.6.1
+	go.lumeweb.com/portal-router v0.6.2
 	go.lumeweb.com/queryutil v0.3.12
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250721203000-f3f43e506eea
 	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20250721203000-f3f43e506eea
@@ -161,7 +161,7 @@ require (
 	go.etcd.io/etcd/api/v3 v3.6.2 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.2 // indirect
 	go.etcd.io/etcd/client/v3 v3.6.2 // indirect
-	go.lumeweb.com/configmanager v0.3.16 // indirect
+	go.lumeweb.com/configmanager v0.3.19 // indirect
 	go.lumeweb.com/event/v2 v2.1.0 // indirect
 	go.shabbyrobe.org/gocovmerge v0.0.0-20230507111327-fa4f82cfbf4d // indirect
 	go.sia.tech/core v0.14.1 // indirect

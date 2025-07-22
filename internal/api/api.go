@@ -1211,7 +1211,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		router.MustDefaultPublicFilesSetup(gRouter, pluginCfg.AppFolder)
 	} else {
 		// Using the new WebAppConfig helper with embedded assets
-		router.MustDefaultStaticSetup(gRouter, portal_dashboard.GetFS())
+		router.MustDefaultStaticSetup(gRouter, router.NewAppFilesystem(portal_dashboard.GetFS(), a.config.Config().Core.Domain))
 	}
 
 	return nil
