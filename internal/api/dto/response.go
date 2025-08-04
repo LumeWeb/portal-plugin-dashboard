@@ -48,12 +48,13 @@ func (r *PongResponse) FromModel(model *PongResponse) error {
 }
 
 type AccountInfoResponse struct {
-	ID        uint   `json:"id"`
-	Email     string `json:"email"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Verified  bool   `json:"verified"`
-	OTP       bool   `json:"otp"`
+	ID        uint      `json:"id"`
+	Email     string    `json:"email"`
+	FirstName string    `json:"first_name"`
+	LastName  string    `json:"last_name"`
+	Verified  bool      `json:"verified"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	OTP       bool      `json:"otp"`
 }
 
 func (r *AccountInfoResponse) FromModel(user *models.User) error {
@@ -62,6 +63,7 @@ func (r *AccountInfoResponse) FromModel(user *models.User) error {
 	r.FirstName = user.FirstName
 	r.LastName = user.LastName
 	r.Verified = user.Verified
+	r.CreatedAt = user.CreatedAt
 	r.OTP = user.OTPEnabled
 	return nil
 }
