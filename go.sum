@@ -645,8 +645,8 @@ go.lumeweb.com/portal v0.4.2-0.20250722101051-5fa1cb4088aa h1:J/2Ujlj2mmucdu/TQO
 go.lumeweb.com/portal v0.4.2-0.20250722101051-5fa1cb4088aa/go.mod h1:mVs9UsKAghyl96Cq8yFaIYB+UFoxDgOJF87PVufi/Qo=
 go.lumeweb.com/portal-middleware v0.2.9 h1:zAgrd0bA9nCmdPJU1XiVK4sRs0SzUQonWrtJ/UY971k=
 go.lumeweb.com/portal-middleware v0.2.9/go.mod h1:WfeUaZPOjw4RTqhumoxDAikFlrQriA+h5EK/pX+why8=
-go.lumeweb.com/portal-router v0.6.2 h1:PbijO2VFXwcjsR6t8HyfblNBqqy6PbIYNxl7wrI6tL8=
-go.lumeweb.com/portal-router v0.6.2/go.mod h1:j16CJajJpzWeGoXxuF9JDfeGu0TrBm+7JXSQSumplSA=
+go.lumeweb.com/portal-router v0.6.3 h1:Hzjvae/OcgGiPigu7qF/hg+mp86NOHN5tScUbRxtEd0=
+go.lumeweb.com/portal-router v0.6.3/go.mod h1:j16CJajJpzWeGoXxuF9JDfeGu0TrBm+7JXSQSumplSA=
 go.lumeweb.com/queryutil v0.3.12 h1:usfolr6PH+1qb45eApdxU6uFzlBuM9RBNSu+jWzLI+4=
 go.lumeweb.com/queryutil v0.3.12/go.mod h1:tcD4meQIXQYNjJ8i0dahCa8kpzQyks+d7PiC+qCXdNg=
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250722121455-9fd8aee7bf77 h1:CelVcl+IctwObZh0bpTH5dHWiclG9aQF84+tCeTTfSU=
