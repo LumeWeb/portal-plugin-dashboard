@@ -1,13 +1,31 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	_ "embed"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png" 
+	_ "image/gif"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
+
+	"github.com/gabriel-vasile/mimetype"
 	jwt2 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/sessions"
+	"github.com/kolesa-team/go-webp/encoder"
+	"github.com/kolesa-team/go-webp/webp"
 	"github.com/labstack/echo/v4" // Import echo
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
@@ -36,16 +54,33 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/hkdf"
 	"gorm.io/gorm"
-	"io"
-	"net/http"
-	"net/url"
-	"time"
 
 	swagger "go.lumeweb.com/gswagger"
 	router "go.lumeweb.com/portal-router"
 )
 
-const returnSessionKey = "return"
+const (
+	returnSessionKey = "return"
+	AvatarUploadDir  = "avatars"
+	AvatarMimeTypes  = "image/jpeg,image/png,image/gif,image/webp" // Still accept all types but convert to WebP
+	AvatarMaxSize    = 5 << 20                                     // 5MB
+	AvatarWidth      = 120
+	AvatarHeight     = 120
+)
+
+func getAvatarPath(userID uint, _ string) (string, error) {
+	return fmt.Sprintf("%s/%d.webp", AvatarUploadDir, userID), nil
+}
+
+func validateMimeType(mimeType string) error {
+	allowed := strings.Split(AvatarMimeTypes, ",")
+	for _, a := range allowed {
+		if a == mimeType {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid mime type %s, allowed: %s", mimeType, AvatarMimeTypes)
+}
 
 var _ core.API = (*API)(nil)
 
@@ -871,6 +906,83 @@ func (a *API) authWithAPIKey(c echo.Context) error {
 	return httputil.EncodeResponse[*dto.LoginResponse](ctx, &dto.LoginResponse{Token: _jwt}, &responseDto)
 }
 
+func (a *API) uploadAvatar(c echo.Context) error {
+	ctx := httputil.Context(c)
+	userID, ok := a.getUser(ctx)
+	if !ok {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
+	}
+
+	upload, err := ctx.PrepareFileUpload(AvatarMaxSize)
+	if err != nil {
+		return ctx.Error(err, http.StatusBadRequest)
+	}
+
+	defer func(src io.ReadSeekCloser) {
+		err := src.Close()
+		if err != nil {
+			a.logger.Error("failed to close avatar file", zap.Error(err))
+		}
+	}(upload.File)
+
+	// Read original image data
+	imgData, err := io.ReadAll(upload.File)
+	if err != nil {
+		return ctx.Error(fmt.Errorf("failed to read avatar file: %w", err), http.StatusBadRequest)
+	}
+
+	// Process and resize image
+	resizedImg, mimeType, err := processAvatar(imgData)
+	if err != nil {
+		return ctx.Error(fmt.Errorf("failed to process avatar: %w", err), http.StatusBadRequest)
+	}
+
+	// Generate storage path
+	path, err := getAvatarPath(userID, mimeType)
+	if err != nil {
+		return ctx.Error(err, http.StatusBadRequest)
+	}
+
+	// Store in S3
+	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
+	err = storage.S3Upload(ctx.Request().Context(),
+		a.config.Config().Core.Storage.S3.BufferBucket,
+		path,
+		bytes.NewReader(resizedImg))
+	if err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	return c.NoContent(http.StatusOK)
+}
+
+func (a *API) getAvatar(c echo.Context) error {
+	ctx := httputil.Context(c)
+	userID, ok := a.getUser(ctx)
+	if !ok {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
+	}
+
+	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
+
+	reader, mimeType, err := findAvatarByExtension(a.config.Config(), storage, ctx.Request().Context(), userID)
+	if err == nil {
+		defer func(reader io.ReadCloser) {
+			err := reader.Close()
+			if err != nil {
+				a.logger.Error("failed to close avatar reader", zap.Error(err))
+			}
+		}(reader)
+		if mimeType != nil {
+			c.Response().Header().Set("Content-Type", mimeType.String())
+		}
+		_, err = io.Copy(c.Response(), reader)
+		return err
+	}
+
+	return ctx.Error(fmt.Errorf("avatar not found"), http.StatusNotFound)
+}
+
 func (a *API) deleteAccount(c echo.Context) error {
 	ctx := httputil.Context(c)
 	user, ok := a.getUser(ctx)
@@ -1161,6 +1273,25 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),
 		),
+		router.NewRoute(http.MethodPost, "/api/account/avatar", a.uploadAvatar,
+			router.WithSwaggerOptions(
+				router.WithSummary("Upload Avatar"),
+				router.WithDescription("Uploads a profile picture/avatar"),
+				router.WithFileUpload("Avatar file to upload", true),
+				router.WithSuccessResponse(http.StatusOK, "Avatar uploaded"),
+			),
+			router.WithAccess(core.ACCESS_USER_ROLE),
+			router.WithMiddlewares(authMw, accessMw),
+		),
+		router.NewRoute(http.MethodGet, "/api/account/avatar", a.getAvatar,
+			router.WithSwaggerOptions(
+				router.WithSummary("Get Avatar"),
+				router.WithDescription("Retrieves the authenticated user's profile picture"),
+				router.WithSuccessResponse(http.StatusOK, "Avatar image"),
+			),
+			router.WithAccess(core.ACCESS_USER_ROLE),
+			router.WithMiddlewares(authMw, accessMw),
+		),
 		router.NewRoute(http.MethodGet, "/api/upload-limit", a.uploadLimit,
 			router.WithSwaggerOptions(
 				router.WithSummary("Get upload limit"),
@@ -1283,4 +1414,65 @@ func accountErrorResponses(errors ...*core.Error) map[int]swagger.ContentValue {
 		resp = router.MergeResponses(resp, router.DefineSwaggerErrorResponse(err.HttpStatus(), err))
 	}
 	return resp
+}
+
+func processAvatar(imgData []byte) ([]byte, string, error) {
+	// Decode image
+	decodedImg, _, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to decode image: %w", err)
+	}
+	img := decodedImg
+
+	// Create thumbnail canvas
+	thumb := image.NewRGBA(image.Rect(0, 0, AvatarWidth, AvatarHeight))
+
+	// Calculate scaling factors
+	srcBounds := img.Bounds()
+	srcAspect := float64(srcBounds.Dx()) / float64(srcBounds.Dy())
+	dstAspect := float64(AvatarWidth) / float64(AvatarHeight)
+
+	var scale float64
+	var srcX, srcY, srcW, srcH int
+
+	if srcAspect > dstAspect {
+		// Source is wider - crop sides
+		scale = float64(AvatarHeight) / float64(srcBounds.Dy())
+		srcW = int(float64(AvatarWidth) / scale)
+		srcH = srcBounds.Dy()
+		srcX = (srcBounds.Dx() - srcW) / 2
+		srcY = 0
+	} else {
+		// Source is taller - crop top/bottom
+		scale = float64(AvatarWidth) / float64(srcBounds.Dx())
+		srcW = srcBounds.Dx()
+		srcH = int(float64(AvatarHeight) / scale)
+		srcX = 0
+		srcY = (srcBounds.Dy() - srcH) / 2
+	}
+
+	// Resize and crop
+	draw.CatmullRom.Scale(thumb, thumb.Bounds(), img, image.Rect(srcX, srcY, srcX+srcW, srcY+srcH), draw.Over, nil)
+
+	// Encode as WebP using kolesa-team encoder
+	var buf bytes.Buffer
+	options, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 85)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create WebP encoder options: %w", err)
+	}
+
+	if err := webp.Encode(&buf, thumb, options); err != nil {
+		return nil, "", fmt.Errorf("failed to encode WebP: %w", err)
+	}
+
+	return buf.Bytes(), "image/webp", nil
+}
+
+func findAvatarByExtension(cfg *config.Config, storage core.StorageService, ctx context.Context, userID uint) (io.ReadCloser, *mimetype.MIME, error) {
+	path := fmt.Sprintf("%s/%d.webp", AvatarUploadDir, userID)
+	reader, err := storage.S3Download(ctx, cfg.Core.Storage.S3.BufferBucket, path)
+	if err == nil {
+		return reader, mimetype.Lookup(".webp"), nil
+	}
+	return nil, nil, fmt.Errorf("avatar not found")
 }
