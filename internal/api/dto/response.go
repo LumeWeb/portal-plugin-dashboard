@@ -108,6 +108,11 @@ type PermissionsModel struct {
 	Model       *core.AccessModel
 }
 
+type AvatarResponse struct {
+	URL      string    `json:"url"`
+	Uploaded time.Time `json:"uploaded"`
+}
+
 type AccountPermissionsResponse struct {
 	Permissions []*core.AccessPolicy `json:"permissions"`
 	Model       *core.AccessModel    `json:"model"`
