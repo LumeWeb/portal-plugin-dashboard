@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg"
-	_ "image/png" 
 	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"net/url"
@@ -128,10 +128,10 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			return nil
 		}),
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			err := core.Fire(ctx, event.EVENT_USER_SERVICE_SUBDOMAIN_SET, event.NewUserServiceSubdomainSetEvent(api.Subdomain()))
-			if err != nil {
-				return err
-			}
+			core.Listen(ctx, event.EVENT_BOOT_COMPLETE, func(e *core.CoreEvent[event.BootCompleteEvent]) error {
+				return core.Fire(ctx, event.EVENT_USER_SERVICE_SUBDOMAIN_SET, event.NewUserServiceSubdomainSetEvent(api.Subdomain()))
+			})
+
 			return nil
 		}),
 
