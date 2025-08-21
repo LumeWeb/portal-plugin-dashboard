@@ -1230,7 +1230,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			),
 			router.WithAccess(""),
 		),
-		router.NewRoute(http.MethodDelete, "/api/account/delete", a.deleteAccount,
+		router.NewRoute(http.MethodDelete, "/api/account", a.deleteAccount,
 			router.WithSwaggerOptions(
 				router.WithSummary("Request account deletion"),
 				router.WithDescription("Initiates the process to delete the authenticated user's account."),
