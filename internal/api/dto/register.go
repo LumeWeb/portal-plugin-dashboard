@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	_ httputil.DTOValidator = (*RegisterRequest)(nil)
+	_ httputil.DTOValidator                 = (*RegisterRequest)(nil)
 	_ httputil.DTORequest[*RegisterRequest] = (*RegisterRequest)(nil)
 )
 
@@ -18,7 +18,7 @@ type RegisterRequest struct {
 }
 
 func (r *RegisterRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"FirstName": z.String().Required().Min(1),
 		"LastName":  z.String().Required().Min(1),
 		"Email":     z.String().Required().Email(),

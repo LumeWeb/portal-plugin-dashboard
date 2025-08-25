@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	_ httputil.DTOValidator = (*LoginRequest)(nil)
-	_ httputil.DTORequest[*LoginRequest] = (*LoginRequest)(nil)
+	_ httputil.DTOValidator                = (*LoginRequest)(nil)
+	_ httputil.DTORequest[*LoginRequest]   = (*LoginRequest)(nil)
 	_ httputil.DTOResponse[*LoginResponse] = (*LoginResponse)(nil)
 )
 
@@ -18,7 +18,7 @@ type LoginRequest struct {
 }
 
 func (r *LoginRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"Email":    z.String().Required().Email(),
 		"Password": z.String().Required().Min(8),
 		"Remember": z.Bool().Optional(),
