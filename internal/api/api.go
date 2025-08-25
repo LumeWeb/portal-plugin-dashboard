@@ -197,7 +197,7 @@ func (a *API) login(c echo.Context) error {
 	exists, _, err := a.user.EmailExists(requestDto.Email)
 	if err != nil {
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
-		a.logger.Error("failed to check if email exists", zap.Error(acctErr))
+		a.logger.Error("failed to check if email exists", zap.Error(acctErr), zap.String("email", requestDto.Email))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
@@ -250,7 +250,7 @@ func (a *API) register(c echo.Context) error {
 	err = a.user.UpdateAccountName(user.ID, requestDto.FirstName, requestDto.LastName)
 	if err != nil {
 		err := core.NewAccountError(core.ErrKeyAccountCreationFailed, err)
-		a.logger.Error("failed to update account name", zap.Error(err))
+		a.logger.Error("failed to update account name", zap.Error(err), zap.Uint("user_id", user.ID))
 		return ctx.Error(err, http.StatusBadRequest)
 	}
 
@@ -656,14 +656,69 @@ func (a *API) updatePassword(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-func (a *API) getUser(ctx httputil.RequestContext) (uint, bool) {
-	user, err := mcontext.GetUserID(ctx.Context)
+// getInputValue safely gets a string value from input pointer, falling back to default if nil or empty
+func getInputValue(input *string, defaultValue string) string {
+	if input == nil {
+		return defaultValue
+	}
+	trimmed := strings.TrimSpace(*input)
+	if trimmed != "" {
+		return trimmed
+	}
+	return defaultValue
+}
 
-	if err != nil {
-		_ = ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
-		return 0, false
+func (a *API) updateProfile(c echo.Context) error {
+	ctx := httputil.Context(c)
+	userID, ok := a.getUser(ctx)
+	if !ok {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
+	var requestDto dto.UpdateProfileRequest
+	_, ok = httputil.DecodeAndValidateRequest[*dto.UpdateProfileRequest, *dto.UpdateProfileRequest](ctx, &requestDto)
+	if !ok {
+		return nil // Error handled by DecodeAndValidateRequest
+	}
+
+	// Get existing user values if fields are empty
+	exists, existingUser, err := a.user.AccountExists(userID)
+	if err != nil {
+		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
+		a.logger.Error("failed to find user", zap.Error(acctErr), zap.Uint("user_id", userID))
+		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+
+	if !exists {
+		acctErr := core.NewAccountError(core.ErrKeyUserNotFound, nil)
+		a.logger.Error("user not found", zap.Error(acctErr))
+		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+
+	firstName := getInputValue(requestDto.FirstName, existingUser.FirstName)
+	lastName := getInputValue(requestDto.LastName, existingUser.LastName)
+
+	// Short-circuit if there are no changes
+	if firstName == existingUser.FirstName && lastName == existingUser.LastName {
+		a.logger.Debug("no profile changes; skipping update", zap.Uint("user_id", userID))
+		return c.NoContent(http.StatusOK)
+	}
+
+	err = a.user.UpdateAccountName(userID, firstName, lastName)
+	if err != nil {
+		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
+		a.logger.Error("failed to update profile", zap.Error(acctErr), zap.Uint("user_id", userID))
+		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+
+	return c.NoContent(http.StatusOK)
+}
+
+func (a *API) getUser(ctx httputil.RequestContext) (uint, bool) {
+	user, err := mcontext.GetUserID(ctx.Context)
+	if err != nil {
+		return 0, false
+	}
 	return user, true
 }
 
@@ -1194,6 +1249,21 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 				router.WithDescription("Updates the authenticated user's email address."),
 				router.WithRequestBody(dto.UpdateEmailRequest{}, "New email and current password", true),
 				router.WithResponseHeaders(http.StatusOK, "Email updated successfully", nil, nil),
+			),
+			router.WithAccess(core.ACCESS_USER_ROLE),
+			router.WithMiddlewares(authMw, accessMw),
+		),
+		router.NewRoute(http.MethodPatch, "/api/account", a.updateProfile,
+			router.WithSwaggerOptions(
+				router.WithSummary("Update profile information"),
+				router.WithDescription("Updates the authenticated user's profile information. Email cannot be updated through this endpoint."),
+				router.WithRequestBody(dto.UpdateProfileRequest{}, "Profile update data", true),
+				router.WithResponseHeaders(http.StatusOK, "Profile updated successfully", nil, nil),
+				router.WithErrorResponses(accountErrorResponses(
+					core.NewAccountError(core.ErrKeyInvalidLogin, nil),
+					core.NewAccountError(core.ErrKeyUserNotFound, nil),
+					core.NewAccountError(core.ErrKeyDatabaseOperationFailed, nil),
+				)),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),

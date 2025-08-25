@@ -6,12 +6,12 @@ import (
 )
 
 var (
-	_ httputil.DTOValidator = (*PasswordResetRequest)(nil)
-	_ httputil.DTOValidator = (*PasswordResetVerifyRequest)(nil)
-	_ httputil.DTOValidator = (*UpdatePasswordRequest)(nil)
-	_ httputil.DTORequest[*PasswordResetRequest] = (*PasswordResetRequest)(nil)
+	_ httputil.DTOValidator                            = (*PasswordResetRequest)(nil)
+	_ httputil.DTOValidator                            = (*PasswordResetVerifyRequest)(nil)
+	_ httputil.DTOValidator                            = (*UpdatePasswordRequest)(nil)
+	_ httputil.DTORequest[*PasswordResetRequest]       = (*PasswordResetRequest)(nil)
 	_ httputil.DTORequest[*PasswordResetVerifyRequest] = (*PasswordResetVerifyRequest)(nil)
-	_ httputil.DTORequest[*UpdatePasswordRequest] = (*UpdatePasswordRequest)(nil)
+	_ httputil.DTORequest[*UpdatePasswordRequest]      = (*UpdatePasswordRequest)(nil)
 )
 
 type PasswordResetRequest struct {
@@ -19,7 +19,7 @@ type PasswordResetRequest struct {
 }
 
 func (r *PasswordResetRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"Email": z.String().Required().Email(),
 	})
 }
@@ -31,7 +31,7 @@ type PasswordResetVerifyRequest struct {
 }
 
 func (r *PasswordResetVerifyRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"Email":    z.String().Required().Email(),
 		"Token":    z.String().Required(),
 		"Password": z.String().Required().Min(8),
@@ -44,7 +44,7 @@ type UpdatePasswordRequest struct {
 }
 
 func (r *UpdatePasswordRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"CurrentPassword": z.String().Required().Min(8),
 		"NewPassword":     z.String().Required().Min(8),
 	})
@@ -63,7 +63,7 @@ func (r *UpdatePasswordRequest) ToModel() (*UpdatePasswordRequest, error) {
 }
 
 var (
-	_ httputil.DTORequest[*PasswordResetRequest] = (*PasswordResetRequest)(nil)
+	_ httputil.DTORequest[*PasswordResetRequest]       = (*PasswordResetRequest)(nil)
 	_ httputil.DTORequest[*PasswordResetVerifyRequest] = (*PasswordResetVerifyRequest)(nil)
-	_ httputil.DTORequest[*UpdatePasswordRequest] = (*UpdatePasswordRequest)(nil)
+	_ httputil.DTORequest[*UpdatePasswordRequest]      = (*UpdatePasswordRequest)(nil)
 )

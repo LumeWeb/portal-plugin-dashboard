@@ -1,10 +1,11 @@
 package dto
 
 import (
+	"time"
+
 	z "github.com/Oudwins/zog"
 	"go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/portal/db/types"
-	"time"
 
 	"go.lumeweb.com/httputil"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
@@ -26,8 +27,24 @@ type APIKeyCreateRequest struct {
 	Name string `json:"name"`
 }
 
+type UpdateProfileRequest struct {
+	FirstName *string `json:"first_name,omitempty"`
+	LastName  *string `json:"last_name,omitempty"`
+}
+
+func (r *UpdateProfileRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"FirstName": z.Ptr(z.String().Optional()),
+		"LastName":  z.Ptr(z.String().Optional()),
+	})
+}
+
+func (r *UpdateProfileRequest) ToModel() (*UpdateProfileRequest, error) {
+	return r, nil
+}
+
 func (r *APIKeyCreateRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"Name": z.String().Required().Min(1),
 	})
 }

@@ -17,7 +17,7 @@ type OTPVerifyRequest struct {
 }
 
 func (r *OTPVerifyRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"OTP": z.String().Required().Len(6),
 	})
 }
@@ -27,7 +27,7 @@ type OTPValidateRequest struct {
 }
 
 func (r *OTPValidateRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"OTP": z.String().Required().Len(6),
 	})
 }
@@ -37,7 +37,7 @@ type OTPDisableRequest struct {
 }
 
 func (r *OTPDisableRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Schema{
+	return z.Struct(z.Shape{
 		"Password": z.String().Required().Min(8),
 	})
 }
