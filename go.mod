@@ -10,7 +10,7 @@ require (
 	github.com/gorilla/sessions v1.4.0
 	github.com/kolesa-team/go-webp v1.0.5
 	github.com/labstack/echo/v4 v4.13.4
-	github.com/markbates/goth v1.81.0
+	github.com/markbates/goth v1.82.0
 	github.com/samber/lo v1.51.0
 	github.com/sethvargo/go-password v0.3.1
 	github.com/stretchr/testify v1.11.0
