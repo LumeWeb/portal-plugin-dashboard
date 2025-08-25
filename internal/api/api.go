@@ -268,6 +268,13 @@ func (a *API) verifyEmail(c echo.Context) error {
 
 	err := a.user.VerifyEmail(requestDto.Email, requestDto.Token)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			if acctErr.IsErrorType(core.ErrKeyAccountAlreadyVerified) {
+				return c.NoContent(http.StatusOK) // idempotent success
+			}
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
