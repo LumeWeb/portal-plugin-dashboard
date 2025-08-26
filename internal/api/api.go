@@ -266,15 +266,28 @@ func (a *API) verifyEmail(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	err := a.user.VerifyEmail(requestDto.Email, requestDto.Token)
+	// First check if account is already verified
+	exists, user, err := a.user.EmailExists(requestDto.Email)
 	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			if acctErr.IsErrorType(core.ErrKeyAccountAlreadyVerified) {
-				return c.NoContent(http.StatusOK) // idempotent success
-			}
-			return ctx.Error(acctErr, acctErr.HttpStatus())
-		}
+		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
+		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+	if !exists {
+		return c.NoContent(http.StatusOK)
+	}
+
+	verified, err := a.user.IsAccountVerified(user.ID)
+	if err != nil {
+		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
+		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+	if verified {
+		return c.NoContent(http.StatusOK) // idempotent success
+	}
+
+	// Only attempt verification if not already verified
+	err = a.user.VerifyEmail(requestDto.Email, requestDto.Token)
+	if err != nil {
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
