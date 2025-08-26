@@ -282,7 +282,8 @@ func (a *API) verifyEmail(c echo.Context) error {
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 	if verified {
-		return c.NoContent(http.StatusOK) // idempotent success
+		acctErr := core.NewAccountError(core.ErrKeyAccountAlreadyVerified, nil)
+		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
 	// Only attempt verification if not already verified
