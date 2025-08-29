@@ -72,6 +72,7 @@ type AccountInfoResponse struct {
 	Verified  bool      `json:"verified"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	OTP       bool      `json:"otp"`
+	AvatarURL string    `json:"avatar_url,omitempty"`
 }
 
 func (r *AccountInfoResponse) FromModel(user *models.User) error {
