@@ -60,14 +60,14 @@ import (
 )
 
 const (
-	returnSessionKey    = "return"
-	AvatarUploadDir     = "avatars"
-	AvatarMimeTypes     = "image/jpeg,image/png,image/gif,image/webp" // Still accept all types but convert to WebP
-	AvatarMaxSize       = 5 << 20                                     // 5MB
-	AvatarWidth         = 120
-	AvatarHeight        = 120
-	AvatarPathFormat    = "%s/%d.webp" // Format string for avatar paths
-	AvatarURLFormat     = "https://%s/api/account/avatar" // Format string for avatar URLs
+	returnSessionKey = "return"
+	AvatarUploadDir  = "avatars"
+	AvatarMimeTypes  = "image/jpeg,image/png,image/gif,image/webp" // Still accept all types but convert to WebP
+	AvatarMaxSize    = 5 << 20                                     // 5MB
+	AvatarWidth      = 120
+	AvatarHeight     = 120
+	AvatarPathFormat = "%s/%d.webp"                    // Format string for avatar paths
+	AvatarURLFormat  = "https://%s/api/account/avatar" // Format string for avatar URLs
 )
 
 func getAvatarPath(userID uint) (string, error) {
@@ -87,16 +87,16 @@ func validateMimeType(mimeType string) error {
 var _ core.API = (*API)(nil)
 
 type API struct {
-	ctx        core.Context
-	config     config.Manager
-	user       core.UserService
-	auth       core.AuthService
-	password   core.PasswordResetService
-	otp        core.OTPService
-	apiKey     service.APIKeyService
-	access     core.AccessService
-	logger     *core.Logger
-	http       core.HTTPService
+	ctx      core.Context
+	config   config.Manager
+	user     core.UserService
+	auth     core.AuthService
+	password core.PasswordResetService
+	otp      core.OTPService
+	apiKey   service.APIKeyService
+	access   core.AccessService
+	logger   *core.Logger
+	http     core.HTTPService
 }
 
 func (a *API) OpenAPIInfo() router.APIInfoDefinition {
@@ -1505,9 +1505,8 @@ func (a *API) setupSocialAuthRoutes(gRouter router.Router) error {
 }
 
 func (a *API) Subdomain() string {
-	return a.http.APISubdomain(a.Name(), false)
+	return core.GetAPIConfig[*pluginConfig.APIConfig](a.ctx, internal.PLUGIN_NAME).Subdomain
 }
-
 
 func (a *API) S3Bucket() string {
 	return a.config.Config().Core.Storage.S3.BufferBucket
