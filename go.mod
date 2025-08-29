@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.11.0
 	go.lumeweb.com/gswagger v0.20.8
 	go.lumeweb.com/httputil v0.5.3
-	go.lumeweb.com/portal v0.4.2-0.20250817063125-a26c04a512b1
+	go.lumeweb.com/portal v0.4.2-0.20250829101516-763570682f93
 	go.lumeweb.com/portal-middleware v0.2.10
 	go.lumeweb.com/portal-router v0.6.3
 	go.lumeweb.com/queryutil v0.3.12
@@ -38,7 +38,7 @@ require (
 	github.com/aws/aws-sdk-go v1.55.7 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.38.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.0 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.29.17 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.31.0 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.3 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.3 // indirect
@@ -59,7 +59,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.9.0 // indirect
 	github.com/boombuler/barcode v1.0.2 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/casbin/casbin/v2 v2.119.0 // indirect
+	github.com/casbin/casbin/v2 v2.120.0 // indirect
 	github.com/casbin/gorm-adapter/v3 v3.36.0 // indirect
 	github.com/casbin/govaluate v1.8.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -155,7 +155,7 @@ require (
 	github.com/spf13/cast v1.9.2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tus/tusd/v2 v2.8.0 // indirect
-	github.com/urfave/cli/v3 v3.3.9 // indirect
+	github.com/urfave/cli/v3 v3.4.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect

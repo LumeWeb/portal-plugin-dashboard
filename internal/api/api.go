@@ -60,16 +60,18 @@ import (
 )
 
 const (
-	returnSessionKey = "return"
-	AvatarUploadDir  = "avatars"
-	AvatarMimeTypes  = "image/jpeg,image/png,image/gif,image/webp" // Still accept all types but convert to WebP
-	AvatarMaxSize    = 5 << 20                                     // 5MB
-	AvatarWidth      = 120
-	AvatarHeight     = 120
+	returnSessionKey    = "return"
+	AvatarUploadDir     = "avatars"
+	AvatarMimeTypes     = "image/jpeg,image/png,image/gif,image/webp" // Still accept all types but convert to WebP
+	AvatarMaxSize       = 5 << 20                                     // 5MB
+	AvatarWidth         = 120
+	AvatarHeight        = 120
+	AvatarPathFormat    = "%s/%d.webp" // Format string for avatar paths
+	AvatarURLFormat     = "https://%s/api/account/avatar" // Format string for avatar URLs
 )
 
-func getAvatarPath(userID uint, _ string) (string, error) {
-	return fmt.Sprintf("%s/%d.webp", AvatarUploadDir, userID), nil
+func getAvatarPath(userID uint) (string, error) {
+	return fmt.Sprintf(AvatarPathFormat, AvatarUploadDir, userID), nil
 }
 
 func validateMimeType(mimeType string) error {
@@ -85,15 +87,16 @@ func validateMimeType(mimeType string) error {
 var _ core.API = (*API)(nil)
 
 type API struct {
-	ctx      core.Context
-	config   config.Manager
-	user     core.UserService
-	auth     core.AuthService
-	password core.PasswordResetService
-	otp      core.OTPService
-	apiKey   service.APIKeyService
-	access   core.AccessService
-	logger   *core.Logger
+	ctx        core.Context
+	config     config.Manager
+	user       core.UserService
+	auth       core.AuthService
+	password   core.PasswordResetService
+	otp        core.OTPService
+	apiKey     service.APIKeyService
+	access     core.AccessService
+	logger     *core.Logger
+	http       core.HTTPService
 }
 
 func (a *API) OpenAPIInfo() router.APIInfoDefinition {
@@ -124,6 +127,7 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			api.apiKey = ctx.Service(service.API_KEY_SERVICE).(service.APIKeyService)
 			api.access = ctx.Service(core.ACCESS_SERVICE).(core.AccessService)
 			api.logger = ctx.APILogger(api)
+			api.http = ctx.Service(core.HTTP_SERVICE).(core.HTTPService)
 
 			return nil
 		}),
@@ -593,6 +597,15 @@ func (a *API) accountInfo(c echo.Context) error {
 	}
 
 	var responseDto dto.AccountInfoResponse
+	err = responseDto.FromModel(acct)
+	if err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	if err := a.setAvatarURL(ctx, user, &responseDto); err != nil {
+		a.logger.Error("failed to set avatar URL", zap.Error(err))
+	}
+
 	return httputil.EncodeResponse[*models.User](ctx, acct, &responseDto)
 }
 
@@ -1008,13 +1021,13 @@ func (a *API) uploadAvatar(c echo.Context) error {
 	}
 
 	// Process and resize image
-	resizedImg, mimeType, err := processAvatar(imgData)
+	resizedImg, _, err := processAvatar(imgData)
 	if err != nil {
 		return ctx.Error(fmt.Errorf("failed to process avatar: %w", err), http.StatusBadRequest)
 	}
 
 	// Generate storage path
-	path, err := getAvatarPath(userID, mimeType)
+	path, err := getAvatarPath(userID)
 	if err != nil {
 		return ctx.Error(err, http.StatusBadRequest)
 	}
@@ -1022,7 +1035,7 @@ func (a *API) uploadAvatar(c echo.Context) error {
 	// Store in S3
 	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
 	err = storage.S3Upload(ctx.Request().Context(),
-		a.config.Config().Core.Storage.S3.BufferBucket,
+		a.S3Bucket(),
 		path,
 		bytes.NewReader(resizedImg))
 	if err != nil {
@@ -1030,6 +1043,23 @@ func (a *API) uploadAvatar(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusOK)
+}
+
+func (a *API) setAvatarURL(ctx httputil.RequestContext, userID uint, responseDto *dto.AccountInfoResponse) error {
+	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
+	path, err := getAvatarPath(userID)
+	if err != nil {
+		return err
+	}
+	exists, err := storage.S3Exists(ctx.Request().Context(), a.S3Bucket(), path)
+	if err != nil {
+		return err
+	}
+	if exists {
+		host := a.http.APISubdomain(a.Name(), true)
+		responseDto.AvatarURL = fmt.Sprintf(AvatarURLFormat, host)
+	}
+	return nil
 }
 
 func (a *API) getAvatar(c echo.Context) error {
@@ -1041,7 +1071,7 @@ func (a *API) getAvatar(c echo.Context) error {
 
 	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
 
-	reader, mimeType, err := findAvatarByExtension(a.config.Config(), storage, ctx.Request().Context(), userID)
+	reader, mimeType, err := a.findAvatarByExtension(storage, ctx.Request().Context(), userID)
 	if err == nil {
 		defer func(reader io.ReadCloser) {
 			err := reader.Close()
@@ -1404,8 +1434,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		}
 	}
 
-	httpService := core.GetService[core.HTTPService](a.ctx, core.HTTP_SERVICE)
-	mainRootRouter := httpService.Router()
+	mainRootRouter := a.http.Router()
 
 	rootRoutes := router.DefineRoutes(
 		router.NewRoute(http.MethodGet, "/api/auth/complete", a.rootAuthComplete,
@@ -1476,7 +1505,12 @@ func (a *API) setupSocialAuthRoutes(gRouter router.Router) error {
 }
 
 func (a *API) Subdomain() string {
-	return a.ctx.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig).Subdomain
+	return a.http.APISubdomain(a.Name(), false)
+}
+
+
+func (a *API) S3Bucket() string {
+	return a.config.Config().Core.Storage.S3.BufferBucket
 }
 
 func (a *API) AuthTokenName() string {
@@ -1559,9 +1593,12 @@ func processAvatar(imgData []byte) ([]byte, string, error) {
 	return buf.Bytes(), "image/webp", nil
 }
 
-func findAvatarByExtension(cfg *config.Config, storage core.StorageService, ctx context.Context, userID uint) (io.ReadCloser, *mimetype.MIME, error) {
-	path := fmt.Sprintf("%s/%d.webp", AvatarUploadDir, userID)
-	reader, err := storage.S3Download(ctx, cfg.Core.Storage.S3.BufferBucket, path)
+func (a *API) findAvatarByExtension(storage core.StorageService, ctx context.Context, userID uint) (io.ReadCloser, *mimetype.MIME, error) {
+	path, err := getAvatarPath(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	reader, err := storage.S3Download(ctx, a.S3Bucket(), path)
 	if err == nil {
 		return reader, mimetype.Lookup(".webp"), nil
 	}
