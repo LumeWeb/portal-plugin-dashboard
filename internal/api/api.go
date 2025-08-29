@@ -218,6 +218,13 @@ func (a *API) login(c echo.Context) error {
 	}
 
 	if user.OTPEnabled {
+		// Set the authentication cookie for OTP login
+		if err = a.setAuthCookie(c, _jwt); err != nil {
+			acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
+			a.logger.Error("failed to set auth cookie", zap.Error(acctErr))
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+
 		responseModel := &dto.LoginResponse{
 			Token: _jwt,
 			Otp:   true,
@@ -522,6 +529,45 @@ func (a *API) ping(c echo.Context) error {
 	return httputil.EncodeResponse(ctx, response, response)
 }
 
+func (a *API) setAuthCookie(c echo.Context, token string) error {
+	decodeToken, err := jwt.DecodeToken(token, &jwt.RegisteredClaims{})
+	if err != nil {
+		return fmt.Errorf("failed to decode token: %w", err)
+	}
+
+	sub, err := decodeToken.GetSubject()
+	if err != nil {
+		return fmt.Errorf("failed to get subject from token: %w", err)
+	}
+	if sub == "" {
+		return errors.New("token subject claim is empty")
+	}
+
+	aud, err := decodeToken.GetAudience()
+	if err != nil {
+		return fmt.Errorf("failed to get audience from token: %w", err)
+	}
+	if len(aud) == 0 {
+		return errors.New("token audience claim is missing")
+	}
+
+	exp, err := decodeToken.GetExpirationTime()
+	if err != nil {
+		return fmt.Errorf("failed to get expiration time from token: %w", err)
+	}
+	if exp == nil {
+		return errors.New("token expiration claim is missing")
+	}
+
+	ttl := time.Until(exp.Time)
+	if ttl <= 0 {
+		return errors.New("token is expired")
+	}
+
+	_, err = adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider()).SetJWTCookie(c.Response(), sub, jwt.Purpose(aud[0]), ttl)
+	return err
+}
+
 func (a *API) rootAuthComplete(c echo.Context) error {
 	ctx := httputil.Context(c)
 	userId, ok := a.getUser(ctx)
@@ -546,29 +592,10 @@ func (a *API) rootAuthComplete(c echo.Context) error {
 
 	returnUrl := c.QueryParam("return")
 
-	decodeToken, err := jwt.DecodeToken(token, &jwt.RegisteredClaims{})
-	if err != nil {
+	// Set the authentication cookie
+	if err := a.setAuthCookie(c, token); err != nil {
 		loginFailed(ctx, err)
-	}
-
-	sub, err := decodeToken.GetSubject()
-	if err != nil {
-		loginFailed(ctx, err)
-	}
-
-	aud, err := decodeToken.GetAudience()
-	if err != nil {
-		loginFailed(ctx, err)
-	}
-
-	exp, err := decodeToken.GetExpirationTime()
-	if err != nil {
-		loginFailed(ctx, err)
-	}
-
-	_, err = adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider()).SetJWTCookie(c.Response(), sub, jwt.Purpose(aud[0]), exp.Time.Sub(time.Now()))
-	if err != nil {
-		loginFailed(ctx, err)
+		return nil
 	}
 
 	if len(returnUrl) > 0 {
