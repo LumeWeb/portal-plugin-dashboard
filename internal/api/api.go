@@ -68,6 +68,8 @@ const (
 	AvatarHeight     = 120
 	AvatarPathFormat = "%s/%d.webp"                    // Format string for avatar paths
 	AvatarURLFormat  = "https://%s/api/account/avatar" // Format string for avatar URLs
+	AuthCompletePath = "/api/auth/complete"            // Path for authentication complete endpoint
+	RememberMeCookie = "remember_me"                   // Cookie name for remember me flag
 )
 
 func getAvatarPath(userID uint) (string, error) {
@@ -210,7 +212,7 @@ func (a *API) login(c echo.Context) error {
 		return ctx.Error(err, http.StatusUnauthorized)
 	}
 
-	_jwt, user, err := a.auth.LoginPassword(requestDto.Email, requestDto.Password, c.Request().RemoteAddr, requestDto.Remember)
+	_jwt, user, err := a.auth.LoginPassword(requestDto.Email, requestDto.Password, ctx.Request().RemoteAddr, requestDto.Remember)
 	if err != nil || user == nil {
 		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
 		a.logger.Error("failed to login", zap.Error(acctErr))
@@ -218,12 +220,16 @@ func (a *API) login(c echo.Context) error {
 	}
 
 	if user.OTPEnabled {
-		// Set the authentication cookie for OTP login
-		if err = a.setAuthCookie(c, _jwt); err != nil {
+		// Set short-lived 2FA cookie; do not apply remember-me here
+		if err = a.setAuthCookieWithRemember(c, _jwt, false); err != nil {
 			acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
 			a.logger.Error("failed to set auth cookie", zap.Error(acctErr))
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
+
+		// Store remember flag in cookie for later use in OTP validation
+		// Always call storeRememberFlagInCookie to ensure proper cookie state
+		a.storeRememberFlagInCookie(c, requestDto.Remember)
 
 		responseModel := &dto.LoginResponse{
 			Token: _jwt,
@@ -237,7 +243,10 @@ func (a *API) login(c echo.Context) error {
 	vals := url.Values{}
 	vals.Add(a.AuthTokenName(), _jwt)
 
-	redirectURL := rootDomain + "/api/auth/complete?" + vals.Encode()
+	redirectURL := rootDomain + AuthCompletePath + "?" + vals.Encode()
+
+	// For non-OTP login, ensure remember cookie is properly set/cleared
+	a.storeRememberFlagInCookie(c, requestDto.Remember)
 
 	return c.Redirect(http.StatusFound, redirectURL)
 }
@@ -406,7 +415,9 @@ func (a *API) otpValidate(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	_jwt, err := a.auth.LoginOTP(user, request.OTP)
+	// Retrieve the remember flag from cookies
+	remember := a.getRememberFlagFromCookie(ctx)
+	_jwt, err := a.auth.LoginOTP(user, request.OTP, remember)
 	if err != nil {
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
@@ -416,7 +427,13 @@ func (a *API) otpValidate(c echo.Context) error {
 	vals := url.Values{}
 	vals.Add(a.AuthTokenName(), _jwt)
 
-	redirectURL := rootDomain + "/api/auth/complete?" + vals.Encode()
+	redirectURL := rootDomain + AuthCompletePath + "?" + vals.Encode()
+
+	// Set the authentication cookie with the remember flag
+	if err := a.setAuthCookieWithRemember(c, _jwt, remember); err != nil {
+		loginFailed(ctx, err)
+		return nil
+	}
 
 	return c.Redirect(http.StatusFound, redirectURL)
 }
@@ -519,7 +536,7 @@ func (a *API) ping(c echo.Context) error {
 		return nil
 	}
 
-	adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider()).EchoAuthCookie(c.Response(), c.Request())
+	a.cookieSetter().EchoAuthCookie(c.Response(), c.Request())
 	jwt.SendHeader(c.Response(), token)
 
 	response := &dto.PongResponse{
@@ -529,7 +546,15 @@ func (a *API) ping(c echo.Context) error {
 	return httputil.EncodeResponse(ctx, response, response)
 }
 
+func (a *API) cookieSetter() adapter.CookieSetter {
+	return adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider())
+}
+
 func (a *API) setAuthCookie(c echo.Context, token string) error {
+	return a.setAuthCookieWithRemember(c, token, false)
+}
+
+func (a *API) setAuthCookieWithRemember(c echo.Context, token string, remember bool) error {
 	decodeToken, err := jwt.DecodeToken(token, &jwt.RegisteredClaims{})
 	if err != nil {
 		return fmt.Errorf("failed to decode token: %w", err)
@@ -564,7 +589,14 @@ func (a *API) setAuthCookie(c echo.Context, token string) error {
 		return errors.New("token is expired")
 	}
 
-	_, err = adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider()).SetJWTCookie(c.Response(), sub, jwt.Purpose(aud[0]), ttl)
+	// If remember is true, don't let cookie TTL exceed token exp to avoid drift
+	if remember {
+		if rttl := time.Duration(a.config.Config().Core.Account.RememberMeTTL) * time.Second; rttl < ttl {
+			ttl = rttl
+		}
+	}
+
+	_, err = a.cookieSetter().SetJWTCookie(c.Response(), sub, jwt.Purpose(aud[0]), ttl)
 	return err
 }
 
@@ -592,8 +624,11 @@ func (a *API) rootAuthComplete(c echo.Context) error {
 
 	returnUrl := c.QueryParam("return")
 
-	// Set the authentication cookie
-	if err := a.setAuthCookie(c, token); err != nil {
+	// Retrieve the remember flag from cookies
+	remember := a.getRememberFlagFromCookie(ctx)
+	
+	// Set the authentication cookie with the remember flag
+	if err := a.setAuthCookieWithRemember(c, token, remember); err != nil {
 		loginFailed(ctx, err)
 		return nil
 	}
@@ -660,7 +695,11 @@ func (a *API) accountPermissions(c echo.Context) error {
 }
 
 func (a *API) logout(c echo.Context) error {
-	adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider()).ClearJWTCookie(c.Response())
+	a.cookieSetter().ClearJWTCookie(c.Response())
+	
+	// Clear the remember-me cookie to prevent preference bleed
+	a.clearRememberMeCookie(c)
+	
 	return c.NoContent(http.StatusOK)
 }
 
@@ -871,7 +910,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 		}
 	}
 
-	_jwt, err := a.auth.LoginID(m.ID, ctx.Request().RemoteAddr)
+	_jwt, err := a.auth.LoginID(m.ID, ctx.Request().RemoteAddr, false)
 	if err != nil {
 		_ = ctx.Error(err, http.StatusInternalServerError)
 		return
@@ -882,9 +921,50 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 	vals.Add(a.AuthTokenName(), _jwt)
 	vals.Add("return", returnUrl)
 
-	redirectURL := rootDomain + "/api/auth/complete?" + vals.Encode()
+	redirectURL := rootDomain + AuthCompletePath + "?" + vals.Encode()
 
 	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
+}
+
+// getRememberFlagFromCookie retrieves the remember flag from a cookie
+func (a *API) getRememberFlagFromCookie(ctx httputil.RequestContext) bool {
+	cookie, err := ctx.Request().Cookie(RememberMeCookie)
+	if err != nil {
+		return false
+	}
+	return cookie.Value == "true"
+}
+
+// storeRememberFlagInCookie stores the remember flag in a cookie
+func (a *API) storeRememberFlagInCookie(c echo.Context, remember bool) {
+	cookieSetter := a.cookieSetter()
+	rememberValue := "false"
+	if remember {
+		rememberValue = "true"
+	}
+	
+	// Set cookie for the configured TTL if remember is true, otherwise expire immediately
+	expiry := time.Now().Add(time.Duration(a.config.Config().Core.Account.RememberMeTTL) * time.Second)
+	if !remember {
+		expiry = time.Now().Add(-1 * time.Hour) // Expire immediately
+	}
+	
+	cookieSetter.SetCookie(
+		c.Response(),
+		RememberMeCookie,
+		rememberValue,
+		a.config.Config().Core.Domain,
+		"/",
+		expiry,
+		true,
+		true,
+		http.SameSiteStrictMode,
+	)
+}
+
+// clearRememberMeCookie clears the remember-me cookie to prevent preference bleed
+func (a *API) clearRememberMeCookie(c echo.Context) {
+	a.storeRememberFlagInCookie(c, false)
 }
 
 func (a *API) createAPIKey(c echo.Context) error {
@@ -1013,7 +1093,7 @@ func (a *API) authWithAPIKey(c echo.Context) error {
 		return ctx.Error(errors.New("invalid API key"), http.StatusUnauthorized)
 	}
 
-	_jwt, err := a.auth.LoginID(validatedKey.UserID, c.Request().RemoteAddr)
+	_jwt, err := a.auth.LoginID(validatedKey.UserID, ctx.Request().RemoteAddr, false)
 	if err != nil {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
@@ -1135,7 +1215,11 @@ func (a *API) deleteAccount(c echo.Context) error {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider()).ClearJWTCookie(c.Response())
+	a.cookieSetter().ClearJWTCookie(c.Response())
+	
+	// Clear the remember-me cookie to prevent preference bleed
+	a.clearRememberMeCookie(c)
+	
 	return c.NoContent(http.StatusOK)
 }
 
@@ -1618,6 +1702,7 @@ func processAvatar(imgData []byte) ([]byte, string, error) {
 
 	return buf.Bytes(), "image/webp", nil
 }
+
 
 func (a *API) findAvatarByExtension(storage core.StorageService, ctx context.Context, userID uint) (io.ReadCloser, *mimetype.MIME, error) {
 	path, err := getAvatarPath(userID)
