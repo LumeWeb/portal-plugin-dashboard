@@ -262,16 +262,26 @@ func (a *API) register(c echo.Context) error {
 
 	user, err := a.user.CreateAccount(requestDto.Email, requestDto.Password, true)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			a.logger.Error("failed to create account", zap.Error(acctErr))
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyAccountCreationFailed, err)
-		a.logger.Error("failed to update account name", zap.Error(acctErr))
+		a.logger.Error("failed to create account", zap.Error(acctErr))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
 	err = a.user.UpdateAccountName(user.ID, requestDto.FirstName, requestDto.LastName)
 	if err != nil {
-		err := core.NewAccountError(core.ErrKeyAccountCreationFailed, err)
-		a.logger.Error("failed to update account name", zap.Error(err), zap.Uint("user_id", user.ID))
-		return ctx.Error(err, http.StatusBadRequest)
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			a.logger.Error("failed to update account name", zap.Error(acctErr), zap.Uint("user_id", user.ID))
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+		acctErr := core.NewAccountError(core.ErrKeyAccountCreationFailed, err)
+		a.logger.Error("failed to update account name", zap.Error(acctErr), zap.Uint("user_id", user.ID))
+		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
 	return c.NoContent(http.StatusOK)
@@ -289,6 +299,10 @@ func (a *API) verifyEmail(c echo.Context) error {
 	// First check if account is already verified
 	exists, user, err := a.user.EmailExists(requestDto.Email)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -298,6 +312,10 @@ func (a *API) verifyEmail(c echo.Context) error {
 
 	verified, err := a.user.IsAccountVerified(user.ID)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -309,6 +327,10 @@ func (a *API) verifyEmail(c echo.Context) error {
 	// Only attempt verification if not already verified
 	err = a.user.VerifyEmail(requestDto.Email, requestDto.Token)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -328,6 +350,10 @@ func (a *API) resendVerifyEmail(c echo.Context) error {
 	exists, _user, err := a.user.EmailExists(requestDto.Email)
 
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -362,7 +388,11 @@ func (a *API) otpGenerate(c echo.Context) error {
 
 	otp, err := a.otp.OTPGenerate(user)
 	if err != nil {
-		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+		acctErr := core.NewAccountError(core.ErrKeyOTPGenerationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
@@ -393,6 +423,10 @@ func (a *API) otpVerify(c echo.Context) error {
 			acctErr := core.NewAccountError(core.ErrKeyInvalidOTPCode, nil)
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
@@ -419,6 +453,10 @@ func (a *API) otpValidate(c echo.Context) error {
 	remember := a.getRememberFlagFromCookie(ctx)
 	_jwt, err := a.auth.LoginOTP(user, request.OTP, remember)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -453,6 +491,10 @@ func (a *API) otpDisable(c echo.Context) error {
 
 	valid, _, err := a.auth.ValidLoginByUserID(user, request.Password)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.JSON(acctErr.HttpStatus(), acctErr)
+		}
 		err := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.JSON(acctErr.HttpStatus(), acctErr)
@@ -465,6 +507,10 @@ func (a *API) otpDisable(c echo.Context) error {
 
 	err = a.otp.OTPDisable(user)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -482,6 +528,10 @@ func (a *API) passwordResetRequest(c echo.Context) error {
 
 	exists, user, err := a.user.EmailExists(requestDto.Email)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -492,6 +542,10 @@ func (a *API) passwordResetRequest(c echo.Context) error {
 
 	err = a.password.SendPasswordReset(user)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -510,6 +564,10 @@ func (a *API) passwordResetConfirm(c echo.Context) error {
 
 	exists, _, err := a.user.EmailExists(requestDto.Email)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
@@ -519,9 +577,11 @@ func (a *API) passwordResetConfirm(c echo.Context) error {
 	}
 
 	err = a.password.ResetPassword(requestDto.Email, requestDto.Token, requestDto.Password)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return ctx.Error(errors.New("API key not found"), http.StatusNotFound)
-	} else if err != nil {
+	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -626,7 +686,7 @@ func (a *API) rootAuthComplete(c echo.Context) error {
 
 	// Retrieve the remember flag from cookies
 	remember := a.getRememberFlagFromCookie(ctx)
-	
+
 	// Set the authentication cookie with the remember flag
 	if err := a.setAuthCookieWithRemember(c, token, remember); err != nil {
 		loginFailed(ctx, err)
@@ -696,10 +756,10 @@ func (a *API) accountPermissions(c echo.Context) error {
 
 func (a *API) logout(c echo.Context) error {
 	a.cookieSetter().ClearJWTCookie(c.Response())
-	
+
 	// Clear the remember-me cookie to prevent preference bleed
 	a.clearRememberMeCookie(c)
-	
+
 	return c.NoContent(http.StatusOK)
 }
 
@@ -728,6 +788,10 @@ func (a *API) updateEmail(c echo.Context) error {
 
 	err := a.user.UpdateAccountEmail(user, requestDto.Email, requestDto.Password)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -750,6 +814,10 @@ func (a *API) updatePassword(c echo.Context) error {
 
 	err := a.user.UpdateAccountPassword(user, requestDto.CurrentPassword, requestDto.NewPassword)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -784,6 +852,11 @@ func (a *API) updateProfile(c echo.Context) error {
 	// Get existing user values if fields are empty
 	exists, existingUser, err := a.user.AccountExists(userID)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			a.logger.Error("failed to find user", zap.Error(acctErr), zap.Uint("user_id", userID))
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		a.logger.Error("failed to find user", zap.Error(acctErr), zap.Uint("user_id", userID))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
@@ -806,6 +879,11 @@ func (a *API) updateProfile(c echo.Context) error {
 
 	err = a.user.UpdateAccountName(userID, firstName, lastName)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			a.logger.Error("failed to update profile", zap.Error(acctErr), zap.Uint("user_id", userID))
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		a.logger.Error("failed to update profile", zap.Error(acctErr), zap.Uint("user_id", userID))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
@@ -886,6 +964,11 @@ func (a *API) socialAuthLogout(c echo.Context) error {
 func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestContext, returnUrl string) {
 	exists, m, err := a.user.EmailExists(guser.Email)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			_ = ctx.Error(acctErr, acctErr.HttpStatus())
+			return
+		}
 		_ = ctx.Error(err, http.StatusInternalServerError)
 		return
 	}
@@ -899,12 +982,22 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 
 		user, err := a.user.CreateAccount(guser.Email, pw, false)
 		if err != nil {
+			if core.IsAccountError(err) {
+				acctErr := core.AsAccountError(err)
+				_ = ctx.Error(acctErr, acctErr.HttpStatus())
+				return
+			}
 			_ = ctx.Error(err, http.StatusInternalServerError)
 			return
 		}
 
 		err = a.user.UpdateAccountName(user.ID, user.FirstName, user.LastName)
 		if err != nil {
+			if core.IsAccountError(err) {
+				acctErr := core.AsAccountError(err)
+				_ = ctx.Error(acctErr, acctErr.HttpStatus())
+				return
+			}
 			_ = ctx.Error(err, http.StatusInternalServerError)
 			return
 		}
@@ -912,6 +1005,11 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 
 	_jwt, err := a.auth.LoginID(m.ID, ctx.Request().RemoteAddr, false)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			_ = ctx.Error(acctErr, acctErr.HttpStatus())
+			return
+		}
 		_ = ctx.Error(err, http.StatusInternalServerError)
 		return
 	}
@@ -942,13 +1040,13 @@ func (a *API) storeRememberFlagInCookie(c echo.Context, remember bool) {
 	if remember {
 		rememberValue = "true"
 	}
-	
+
 	// Set cookie for the configured TTL if remember is true, otherwise expire immediately
 	expiry := time.Now().Add(time.Duration(a.config.Config().Core.Account.RememberMeTTL) * time.Second)
 	if !remember {
 		expiry = time.Now().Add(-1 * time.Hour) // Expire immediately
 	}
-	
+
 	cookieSetter.SetCookie(
 		c.Response(),
 		RememberMeCookie,
@@ -988,6 +1086,10 @@ func (a *API) createAPIKey(c echo.Context) error {
 	// Create API key record
 	apiKey, err := a.apiKey.CreateAPIKey(user, requestDto.Name)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -1006,6 +1108,10 @@ func (a *API) createAPIKey(c echo.Context) error {
 		}),
 	)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -1054,6 +1160,10 @@ func (a *API) deleteAPIKey(c echo.Context) error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ctx.Error(err, http.StatusNotFound)
 		}
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -1095,6 +1205,10 @@ func (a *API) authWithAPIKey(c echo.Context) error {
 
 	_jwt, err := a.auth.LoginID(validatedKey.UserID, ctx.Request().RemoteAddr, false)
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -1146,6 +1260,10 @@ func (a *API) uploadAvatar(c echo.Context) error {
 		path,
 		bytes.NewReader(resizedImg))
 	if err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
@@ -1216,10 +1334,10 @@ func (a *API) deleteAccount(c echo.Context) error {
 	}
 
 	a.cookieSetter().ClearJWTCookie(c.Response())
-	
+
 	// Clear the remember-me cookie to prevent preference bleed
 	a.clearRememberMeCookie(c)
-	
+
 	return c.NoContent(http.StatusOK)
 }
 
@@ -1702,7 +1820,6 @@ func processAvatar(imgData []byte) ([]byte, string, error) {
 
 	return buf.Bytes(), "image/webp", nil
 }
-
 
 func (a *API) findAvatarByExtension(storage core.StorageService, ctx context.Context, userID uint) (io.ReadCloser, *mimetype.MIME, error) {
 	path, err := getAvatarPath(userID)
