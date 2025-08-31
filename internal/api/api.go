@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,7 +113,7 @@ func (a *API) Config() config.APIConfig {
 }
 
 func (a *API) Name() string {
-	return "account"
+	return "dashboard"
 }
 
 func NewAPI() (core.API, []core.ContextBuilderOption, error) {
@@ -333,6 +334,36 @@ func (a *API) verifyEmail(c echo.Context) error {
 		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+
+	// Check for auto-login query parameter
+	autoLogin := false
+	remember := false
+	if loginParam := c.QueryParam("login"); loginParam != "" {
+		autoLogin, _ = strconv.ParseBool(loginParam)
+		remember, _ = strconv.ParseBool(loginParam)
+	}
+	
+	// If auto-login is requested and user doesn't have 2FA enabled
+	if autoLogin && !user.OTPEnabled {
+		// Check if user is already logged in
+		_, authErr := mcontext.GetAuthToken(ctx.Context)
+		if authErr != nil {
+			// User is not logged in, so we can proceed with auto-login
+			_jwt, loginErr := a.auth.LoginID(user.ID, ctx.Request().RemoteAddr, remember)
+			if loginErr != nil {
+				acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, loginErr)
+				a.logger.Error("failed to auto-login after email verification", zap.Error(acctErr))
+				// Don't return error here - email verification was successful, just auto-login failed
+			} else {
+				// Set the authentication cookie with the remember flag
+				if setCookieErr := a.setAuthCookieWithRemember(c, _jwt, remember); setCookieErr != nil {
+					acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, setCookieErr)
+					a.logger.Error("failed to set auth cookie after email verification", zap.Error(acctErr))
+					// Don't return error here - email verification was successful, just cookie setting failed
+				}
+			}
+		}
 	}
 
 	return c.NoContent(http.StatusOK)
@@ -1508,8 +1539,9 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		router.NewRoute(http.MethodPost, "/api/account/verify-email", a.verifyEmail,
 			router.WithSwaggerOptions(
 				router.WithSummary("Verify email address"),
-				router.WithDescription("Verifies a user's email address using a token sent via email."),
+				router.WithDescription("Verifies a user's email address using a token sent via email. Optionally auto-login user if they don't have 2FA enabled."),
 				router.WithRequestBody(dto.VerifyEmailRequest{}, "Email and verification token", true),
+				router.WithQueryParam("login", "Auto-login user after verification (boolean: true/false; also accepts 1/0).", "true"),
 				router.WithResponseHeaders(http.StatusOK, "Email verified successfully", nil, nil),
 			),
 			router.WithAccess(""),
