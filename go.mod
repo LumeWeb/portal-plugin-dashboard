@@ -16,12 +16,12 @@ require (
 	github.com/stretchr/testify v1.11.0
 	go.lumeweb.com/gswagger v0.20.8
 	go.lumeweb.com/httputil v0.5.3
-	go.lumeweb.com/portal v0.4.2-0.20250830051221-2e73c942000e
+	go.lumeweb.com/portal v0.4.2-0.20250901034305-87a58d504373
 	go.lumeweb.com/portal-middleware v0.2.11
-	go.lumeweb.com/portal-router v0.6.3
+	go.lumeweb.com/portal-router v0.6.5
 	go.lumeweb.com/queryutil v0.3.12
-	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250830164337-2cbd9f3e2831
-	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20250830164337-2cbd9f3e2831
+	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250901035555-d0898ae91f80
+	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20250901035555-d0898ae91f80
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.41.0
 	golang.org/x/image v0.30.0
