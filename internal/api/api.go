@@ -1313,7 +1313,7 @@ func (a *API) setAvatarURL(ctx httputil.RequestContext, userID uint, responseDto
 	}
 	if exists {
 		host := a.http.APISubdomain(a.Name(), true)
-		responseDto.AvatarURL = fmt.Sprintf(AvatarURLFormat, host)
+		responseDto.Avatar = fmt.Sprintf(AvatarURLFormat, host)
 	}
 	return nil
 }
