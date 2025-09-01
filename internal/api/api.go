@@ -67,10 +67,10 @@ const (
 	AvatarMaxSize    = 5 << 20                                     // 5MB
 	AvatarWidth      = 120
 	AvatarHeight     = 120
-	AvatarPathFormat = "%s/%d.webp"                    // Format string for avatar paths
-	AvatarURLFormat  = "https://%s/api/account/avatar" // Format string for avatar URLs
-	AuthCompletePath = "/api/auth/complete"            // Path for authentication complete endpoint
-	RememberMeCookie = "remember_me"                   // Cookie name for remember me flag
+	AvatarPathFormat = "%s/%d.webp"            // Format string for avatar paths
+	AvatarURLFormat  = "%s/api/account/avatar" // Format string for avatar URLs
+	AuthCompletePath = "/api/auth/complete"    // Path for authentication complete endpoint
+	RememberMeCookie = "remember_me"           // Cookie name for remember me flag
 )
 
 func getAvatarPath(userID uint) (string, error) {
@@ -343,7 +343,7 @@ func (a *API) verifyEmail(c echo.Context) error {
 		autoLogin, _ = strconv.ParseBool(loginParam)
 		remember, _ = strconv.ParseBool(loginParam)
 	}
-	
+
 	// If auto-login is requested and user doesn't have 2FA enabled
 	if autoLogin && !user.OTPEnabled {
 		// Check if user is already logged in
