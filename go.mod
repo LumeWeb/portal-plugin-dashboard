@@ -4,7 +4,7 @@ go 1.24.3
 
 require (
 	github.com/Oudwins/zog v0.21.6
-	github.com/gabriel-vasile/mimetype v1.4.9
+	github.com/gabriel-vasile/mimetype v1.4.10
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
