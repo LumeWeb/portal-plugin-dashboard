@@ -1713,6 +1713,11 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		return fmt.Errorf("failed to register root auth complete route: %w", err)
 	}
 
+	err := a.http.RegisterGlobalPath("/api/auth/complete")
+	if err != nil {
+		return fmt.Errorf("failed to register global path: %w", err)
+	}
+
 	echoRouter := router.GetRouter(gRouter)
 	if echoRouter == nil {
 		panic("Underlying router is nil")
