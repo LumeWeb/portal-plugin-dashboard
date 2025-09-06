@@ -1037,7 +1037,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 		return
 	}
 
-	redirectURL := a.buildAuthCompleteURL(c, _jwt, returnUrl)
+	redirectURL := a.buildAuthCompleteURL(ctx.Context, _jwt, returnUrl)
 
 	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
 }
@@ -1847,7 +1847,7 @@ func processAvatar(imgData []byte) ([]byte, string, error) {
 
 func (a *API) buildAuthCompleteURL(c echo.Context, token string, returnURL string) string {
 	cfg := a.ctx.Config().Config().Core
-	
+
 	// Determine effective port (prefer externalPort if set)
 	port := cfg.ExternalPort
 	if port == 0 {
