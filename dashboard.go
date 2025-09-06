@@ -4,6 +4,7 @@ import (
 	"embed"
 	_ "embed"
 	"fmt"
+
 	"go.lumeweb.com/portal-plugin-dashboard/build"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api"
@@ -19,6 +20,8 @@ import (
 
 //go:embed templates/*
 var mailerTemplates embed.FS
+
+type APIConfig = pluginConfig.APIConfig
 
 func init() {
 	templates, err := service.MailerTemplatesFromEmbed(&mailerTemplates, "")
