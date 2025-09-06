@@ -240,11 +240,7 @@ func (a *API) login(c echo.Context) error {
 		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
 	}
 
-	rootDomain := "https://" + a.ctx.Config().Config().Core.Domain
-	vals := url.Values{}
-	vals.Add(a.AuthTokenName(), _jwt)
-
-	redirectURL := rootDomain + AuthCompletePath + "?" + vals.Encode()
+	redirectURL := a.buildAuthCompleteURL(_jwt, "")
 
 	// For non-OTP login, ensure remember cookie is properly set/cleared
 	a.storeRememberFlagInCookie(c, requestDto.Remember)
@@ -492,11 +488,7 @@ func (a *API) otpValidate(c echo.Context) error {
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
-	rootDomain := "https://" + a.ctx.Config().Config().Core.Domain
-	vals := url.Values{}
-	vals.Add(a.AuthTokenName(), _jwt)
-
-	redirectURL := rootDomain + AuthCompletePath + "?" + vals.Encode()
+	redirectURL := a.buildAuthCompleteURL(_jwt, "")
 
 	// Set the authentication cookie with the remember flag
 	if err := a.setAuthCookieWithRemember(c, _jwt, remember); err != nil {
@@ -1045,12 +1037,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 		return
 	}
 
-	rootDomain := "https://" + a.ctx.Config().Config().Core.Domain
-	vals := url.Values{}
-	vals.Add(a.AuthTokenName(), _jwt)
-	vals.Add("return", returnUrl)
-
-	redirectURL := rootDomain + AuthCompletePath + "?" + vals.Encode()
+	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
 
 	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
 }
@@ -1856,6 +1843,59 @@ func processAvatar(imgData []byte) ([]byte, string, error) {
 	}
 
 	return buf.Bytes(), "image/webp", nil
+}
+
+func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
+	cfg := a.ctx.Config().Config().Core
+	
+	// Determine effective port (prefer externalPort if set)
+	port := cfg.ExternalPort
+	if port == 0 {
+		port = cfg.Port
+	}
+
+	// Build host with port if needed
+	host := cfg.Domain
+	if port != 0 && port != 443 && port != 80 {
+		host = fmt.Sprintf("%s:%d", host, port)
+	}
+
+	// Use configured scheme (default to https)
+	scheme := "https"
+	if cfg.Scheme != "" {
+		scheme = cfg.Scheme
+	}
+
+	// Validate and sanitize returnURL if provided
+	var sanitizedReturn string
+	if returnURL != "" {
+		if parsedURL, err := url.Parse(returnURL); err == nil {
+			// Only allow relative paths or same-origin URLs
+			if parsedURL.Host == "" || parsedURL.Host == host {
+				sanitizedReturn = parsedURL.String()
+			}
+		}
+	}
+
+	// Build URL with query params
+	u := url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   AuthCompletePath,
+	}
+
+	query := url.Values{}
+	if token != "" {
+		query.Set(a.AuthTokenName(), token) // Use configured auth token name
+	}
+	if sanitizedReturn != "" {
+		query.Set("return", sanitizedReturn)
+	}
+	if len(query) > 0 {
+		u.RawQuery = query.Encode()
+	}
+
+	return u.String()
 }
 
 func (a *API) findAvatarByExtension(storage core.StorageService, ctx context.Context, userID uint) (io.ReadCloser, *mimetype.MIME, error) {
