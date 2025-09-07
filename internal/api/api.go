@@ -1362,9 +1362,9 @@ func (a *API) deleteAccount(c echo.Context) error {
 func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) error {
 	pluginCfg := a.config.GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 
-	loginAuthMw2fa := middleware.AuthMiddleware(a.ctx, jwt.Purpose2FA)
-	verifyApiKey := middleware.AuthMiddleware(a.ctx, jwt.Purpose2FA)
-	authMw := middleware.AuthMiddleware(a.ctx, jwt.PurposeLogin)
+	loginAuthMw2fa := middleware.AuthMiddleware(a.ctx, middleware.WithAuthPurpose(jwt.Purpose2FA))
+	verifyApiKey := middleware.AuthMiddleware(a.ctx, middleware.WithAuthPurpose(jwt.Purpose2FA))
+	authMw := middleware.AuthMiddleware(a.ctx, middleware.WithAuthPurpose(jwt.PurposeLogin))
 	accessMw := middleware.AccessMiddleware(a.ctx)
 
 	routes := router.DefineRoutes(
