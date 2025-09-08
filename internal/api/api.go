@@ -135,10 +135,9 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			return nil
 		}),
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			core.Listen(ctx, event.EVENT_BOOT_COMPLETE, func(e *core.CoreEvent[event.BootCompleteEvent]) error {
+			event.OnBootCompleted(ctx, func(ctx core.Context) error {
 				return core.Fire(ctx, event.EVENT_USER_SERVICE_SUBDOMAIN_SET, event.NewUserServiceSubdomainSetEvent(api.Subdomain()))
 			})
-
 			return nil
 		}),
 
