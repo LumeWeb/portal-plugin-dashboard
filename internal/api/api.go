@@ -239,7 +239,7 @@ func (a *API) login(c echo.Context) error {
 		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
 	}
 
-	redirectURL := a.buildAuthCompleteURL(c, _jwt, "")
+	redirectURL := a.buildAuthCompleteURL(_jwt, "")
 
 	// For non-OTP login, ensure remember cookie is properly set/cleared
 	a.storeRememberFlagInCookie(c, requestDto.Remember)
@@ -487,7 +487,7 @@ func (a *API) otpValidate(c echo.Context) error {
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
-	redirectURL := a.buildAuthCompleteURL(c, _jwt, "")
+	redirectURL := a.buildAuthCompleteURL(_jwt, "")
 
 	// Set the authentication cookie with the remember flag
 	if err := a.setAuthCookieWithRemember(c, _jwt, remember); err != nil {
@@ -1036,7 +1036,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 		return
 	}
 
-	redirectURL := a.buildAuthCompleteURL(ctx.Context, _jwt, returnUrl)
+	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
 
 	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
 }
@@ -1844,7 +1844,7 @@ func processAvatar(imgData []byte) ([]byte, string, error) {
 	return buf.Bytes(), "image/webp", nil
 }
 
-func (a *API) buildAuthCompleteURL(c echo.Context, token string, returnURL string) string {
+func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
 	cfg := a.ctx.Config().Config().Core
 
 	// Determine effective port (prefer externalPort if set)
@@ -1861,7 +1861,7 @@ func (a *API) buildAuthCompleteURL(c echo.Context, token string, returnURL strin
 
 	// Use scheme from request
 	scheme := "http"
-	if c.Request().URL != nil && c.Request().URL.Scheme == "https" {
+	if cfg.Secure {
 		scheme = "https"
 	}
 
