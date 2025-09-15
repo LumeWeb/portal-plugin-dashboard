@@ -8,18 +8,20 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
+	github.com/ipfs/go-cid v0.5.0
 	github.com/kolesa-team/go-webp v1.0.5
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/markbates/goth v1.82.0
+	github.com/multiformats/go-multihash v0.2.3
 	github.com/samber/lo v1.51.0
 	github.com/sethvargo/go-password v0.3.1
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/gswagger v0.20.9
 	go.lumeweb.com/httputil v0.5.3
-	go.lumeweb.com/portal v0.4.2-0.20250909165015-2cac2437c319
+	go.lumeweb.com/portal v0.4.2-0.20250916151434-1fe69dfdf417
 	go.lumeweb.com/portal-middleware v0.3.1
 	go.lumeweb.com/portal-router v0.6.7
-	go.lumeweb.com/queryutil v0.3.13
+	go.lumeweb.com/queryutil v0.3.14
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250902102957-647bde87ec98
 	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20250902102957-647bde87ec98
 	go.uber.org/zap v1.27.0
@@ -94,7 +96,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
 	github.com/hbollon/go-edlib v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/ipfs/go-cid v0.5.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.7.5 // indirect
@@ -129,7 +130,6 @@ require (
 	github.com/multiformats/go-base32 v0.1.0 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
 	github.com/multiformats/go-multibase v0.2.0 // indirect
-	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
@@ -171,7 +171,7 @@ require (
 	go.sia.tech/coreutils v0.16.5 // indirect
 	go.sia.tech/jape v0.14.0 // indirect
 	go.sia.tech/mux v1.4.0 // indirect
-	go.sia.tech/renterd/v2 v2.5.0 // indirect
+	go.sia.tech/renterd/v2 v2.4.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b // indirect
@@ -193,7 +193,7 @@ require (
 	gorm.io/driver/postgres v1.6.0 // indirect
 	gorm.io/driver/sqlite v1.6.0 // indirect
 	gorm.io/driver/sqlserver v1.6.0 // indirect
-	gorm.io/plugin/dbresolver v1.6.0 // indirect
+	gorm.io/plugin/dbresolver v1.6.2 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 	lukechampine.com/frand v1.5.1 // indirect
 	modernc.org/libc v1.66.3 // indirect
@@ -202,8 +202,4 @@ require (
 	modernc.org/sqlite v1.38.0 // indirect
 )
 
-replace (
-	github.com/go-viper/mapstructure/v2 => github.com/LumeWeb/mapstructure/v2 v2.0.0-20241213212524-92525f5828be
-	github.com/tus/tusd/v2 => github.com/LumeWeb/tusd/v2 v2.2.3-0.20241020013555-e29b4c6c01b7
-	gorm.io/plugin/dbresolver => gorm.io/plugin/dbresolver v1.5.3
-)
+replace github.com/go-viper/mapstructure/v2 => github.com/LumeWeb/mapstructure/v2 v2.0.0-20241213212524-92525f5828be
