@@ -5,7 +5,6 @@ import (
 
 	"github.com/ipfs/go-cid"
 	"github.com/labstack/echo/v4"
-	"github.com/samber/lo"
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	router "go.lumeweb.com/portal-router"
