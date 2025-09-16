@@ -104,7 +104,8 @@ func (a *API) buildOperationRoutes(authMw echo.MiddlewareFunc, accessMw echo.Mid
 				router.WithQueryParam("search", "Search term for filename or other relevant operation data", ""),
 				router.WithPaginationParams(),
 				router.WithSortParams(operationSchema.SortableFields()),
-				router.WithFilterParamsFromSchema(operationSchema),
+				//  TODO: Fix panic on processing schemas with pointers?
+				//	router.WithFilterParamsFromSchema(operationSchema),
 				router.WithSuccessResponse(http.StatusOK, "A list of operations",
 					router.WithJSONContent(queryutil.Response[*dto.OperationListItem]{}),
 					router.WithTotalCountHeader(),
