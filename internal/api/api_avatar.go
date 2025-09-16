@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -12,6 +13,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 
@@ -178,7 +181,6 @@ func (a *API) getAvatarPath(userID uint) (string, error) {
 	return fmt.Sprintf(AvatarPathFormat, AvatarUploadDir, userID), nil
 }
 
-
 func (a *API) getAvatarReader(storage core.StorageService, ctx context.Context, userID uint) (io.ReadCloser, *mimetype.MIME, error) {
 	path, err := a.getAvatarPath(userID)
 	if err != nil {
@@ -188,16 +190,16 @@ func (a *API) getAvatarReader(storage core.StorageService, ctx context.Context, 
 	if err == nil {
 		return reader, mimetype.Lookup(".webp"), nil
 	}
-	
+
 	// Check for AWS S3 "not found" errors and map them to 404
 	var notFound *types.NotFound
 	var apiErr smithy.APIError
-	if errors.As(err, &notFound) || 
-		(errors.As(err, &apiErr) && 
+	if errors.As(err, &notFound) ||
+		(errors.As(err, &apiErr) &&
 			(apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey")) {
 		return nil, nil, fmt.Errorf("avatar not found")
 	}
-	
+
 	// For all other errors, wrap and return so handler can map to 5xx
 	return nil, nil, fmt.Errorf("failed to download avatar: %w", err)
 }
