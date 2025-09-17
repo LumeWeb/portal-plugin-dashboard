@@ -15,6 +15,26 @@ import (
 
 func (a *API) buildAuthRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.MiddlewareFunc, accessMw echo.MiddlewareFunc) []router.Route {
 	return []router.Route{
+		router.NewRoute(http.MethodPost, "/api/auth/login", a.login,
+			router.WithSwaggerOptions(
+				router.WithSummary("Login with email and password"),
+				router.WithDescription("Authenticates a user using email and password."),
+				router.WithRequestBody(dto.LoginRequest{}, "Login credentials", true),
+				router.WithSuccessResponse(http.StatusOK, "OTP required",
+					router.WithJSONContent(dto.LoginResponse{}),
+				),
+				router.WithSuccessResponse(http.StatusFound, "Redirect to auth complete (for non-OTP)",
+					router.WithHeader("Location", "URL to redirect to"),
+				),
+				router.WithErrorResponses(accountErrorResponses(
+					core.NewAccountError(core.ErrKeyInvalidLogin, nil),
+					core.NewAccountError(core.ErrKeyAccountNotVerified, nil),
+					core.NewAccountError(core.ErrKeyAccountPendingDeletion, nil),
+					core.NewAccountError(core.ErrKeyLoginFailed, nil),
+				)),
+			),
+			router.WithAccess(""),
+		),
 		router.NewRoute(http.MethodPost, "/api/auth/logout", a.logout,
 			router.WithSwaggerOptions(
 				router.WithSummary("Logout"),
