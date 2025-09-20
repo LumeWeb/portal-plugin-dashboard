@@ -15,6 +15,20 @@ import (
 
 func (a *API) buildAuthRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.MiddlewareFunc, accessMw echo.MiddlewareFunc) []router.Route {
 	return []router.Route{
+		router.NewRoute(http.MethodPost, "/api/auth/register", a.register,
+			router.WithSwaggerOptions(
+				router.WithSummary("Register a new account"),
+				router.WithDescription("Creates a new user account with email and password."),
+				router.WithRequestBody(dto.RegisterRequest{}, "Registration details", true),
+				router.WithSuccessResponse(http.StatusOK, "Account created successfully"),
+				router.WithErrorResponses(accountErrorResponses(
+					core.NewAccountError(core.ErrKeyAccountCreationFailed, nil),
+					core.NewAccountError(core.ErrKeyEmailAlreadyExists, nil),
+					core.NewAccountError(core.ErrKeyDatabaseOperationFailed, nil),
+				)),
+			),
+			router.WithAccess(""),
+		),
 		router.NewRoute(http.MethodPost, "/api/auth/login", a.login,
 			router.WithSwaggerOptions(
 				router.WithSummary("Login with email and password"),
