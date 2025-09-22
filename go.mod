@@ -4,8 +4,9 @@ go 1.24.3
 
 require (
 	github.com/Oudwins/zog v0.21.6
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.87.0
+	github.com/aws/smithy-go v1.23.0
 	github.com/gabriel-vasile/mimetype v1.4.10
-	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/ipfs/go-cid v0.5.0
@@ -22,8 +23,8 @@ require (
 	go.lumeweb.com/portal-middleware v0.3.1
 	go.lumeweb.com/portal-router v0.6.7
 	go.lumeweb.com/queryutil v0.3.14
-	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250902102957-647bde87ec98
-	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20250902102957-647bde87ec98
+	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250922174307-2f5de9e6503c
+	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20250922174307-2f5de9e6503c
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.42.0
 	golang.org/x/image v0.31.0
@@ -51,11 +52,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.8.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.87.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.29.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.3 // indirect
-	github.com/aws/smithy-go v1.23.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.0 // indirect
@@ -87,6 +86,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
