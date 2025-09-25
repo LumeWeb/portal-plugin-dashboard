@@ -28,7 +28,7 @@ func TestListOperations_Success(t *testing.T) {
 		hash1, err := multihash.Sum([]byte("testhash1"), multihash.SHA2_256, -1)
 		require.NoError(tb, err)
 		cid1 := cid.NewCidV1(cid.DagProtobuf, hash1)
-		
+
 		hash2, err := multihash.Sum([]byte("testhash2"), multihash.SHA2_256, -1)
 		require.NoError(tb, err)
 		cid2 := cid.NewCidV1(cid.DagProtobuf, hash2)
@@ -134,8 +134,8 @@ func TestListOperations_Success(t *testing.T) {
 		assert.Equal(tb, models.RequestStatusCompleted, op1.Status)
 		assert.Equal(tb, "Upload completed", op1.StatusMessage)
 		assert.InDelta(tb, float64(66.67), op1.ProgressPercent, 0.005)
-		assert.Equal(tb, 3, op1.TotalSteps)
-		assert.Equal(tb, 2, op1.CurrentStep)
+		assert.Equal(tb, int64(3), *op1.TotalSteps)
+		assert.Equal(tb, int64(2), *op1.CurrentStep)
 
 		// Verify second operation
 		op2 := response.Data[1]
@@ -145,11 +145,200 @@ func TestListOperations_Success(t *testing.T) {
 		assert.Equal(tb, models.RequestStatusPending, op2.Status)
 		assert.Equal(tb, "Starting pin process", op2.StatusMessage)
 		assert.Equal(tb, float64(0), op2.ProgressPercent)
-		assert.Equal(tb, 2, op2.TotalSteps)
-		assert.Equal(tb, 0, op2.CurrentStep)
+		assert.Equal(tb, int64(2), *op2.TotalSteps)
+		assert.Equal(tb, int64(0), *op2.CurrentStep)
 
 		// Verify CID - use the same CID that was created in the test
-		assert.Equal(tb, cid1, op1.CID)
+		assert.Equal(tb, &cid1, op1.CID)
+
+		// Verify mock expectations
+		userSvc.AssertExpectations(tb)
+		workflowSvc.AssertExpectations(tb)
+	})
+}
+
+func TestGetOperationFilters_Success(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Retrieve necessary services and router from the context
+		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+		router := ctx.Router()
+		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		// Mock data
+		mockUser := &models.User{
+			Model: gorm.Model{ID: 1},
+			Email: "test@example.com",
+		}
+
+		mockFilters := map[string][]string{
+			"status":    {"completed", "pending", "failed"},
+			"operation": {"upload", "pin"},
+			"protocol":  {"s3", "ipfs"},
+		}
+
+		// Mock expectations
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.On("ListDistinctWorkflowFilters", mock.Anything, uint(1), mock.Anything).
+			Return(mockFilters, nil).Once()
+
+		// Create valid JWT token using the context's identity
+		pk := ctx.Config().Config().Core.Identity.PrivateKey()
+		jwtToken, err := jwt.CreateToken(pk, ctx.Config().Config().Core.Domain, "1", jwt.PurposeLogin, 90*24*time.Hour)
+		require.NoError(tb, err, "Failed to generate test JWT")
+
+		req := httptest.NewRequest("GET", "/api/operations/filters", nil)
+		req.Host = domain
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
+		w := httptest.NewRecorder()
+
+		// Execute
+		router.ServeHTTP(w, req)
+
+		// Verify
+		assert.Equal(tb, http.StatusOK, w.Code)
+
+		var response dto.OperationFiltersResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(tb, err)
+
+		// Verify we have distinct values
+		assert.Len(tb, response.Statuses, 3)   // completed, pending, failed
+		assert.Len(tb, response.Operations, 2) // upload, pin
+		assert.Len(tb, response.Protocols, 2)  // s3, ipfs
+
+		// Verify content includes expected values
+		expectedStatuses := []models.RequestStatusType{
+			models.RequestStatusCompleted,
+			models.RequestStatusPending,
+			models.RequestStatusFailed,
+		}
+		for _, status := range expectedStatuses {
+			assert.Contains(tb, response.Statuses, status)
+		}
+
+		expectedOperations := []string{"upload", "pin"}
+		for _, operation := range expectedOperations {
+			assert.Contains(tb, response.Operations, operation)
+		}
+
+		expectedProtocols := []string{"s3", "ipfs"}
+		for _, protocol := range expectedProtocols {
+			assert.Contains(tb, response.Protocols, protocol)
+		}
+
+		// Verify mock expectations
+		userSvc.AssertExpectations(tb)
+		workflowSvc.AssertExpectations(tb)
+	})
+}
+
+func TestGetOperationFilters_EmptyResult(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Retrieve necessary services and router from the context
+		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+		router := ctx.Router()
+		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		// Mock data
+		mockUser := &models.User{
+			Model: gorm.Model{ID: 1},
+			Email: "test@example.com",
+		}
+
+		// Mock expectations - empty filters map
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.On("ListDistinctWorkflowFilters", mock.Anything, uint(1), mock.Anything).
+			Return(map[string][]string{}, nil).Once()
+
+		// Create valid JWT token using the context's identity
+		pk := ctx.Config().Config().Core.Identity.PrivateKey()
+		jwtToken, err := jwt.CreateToken(pk, ctx.Config().Config().Core.Domain, "1", jwt.PurposeLogin, 90*24*time.Hour)
+		require.NoError(tb, err, "Failed to generate test JWT")
+
+		req := httptest.NewRequest("GET", "/api/operations/filters", nil)
+		req.Host = domain
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
+		w := httptest.NewRecorder()
+
+		// Execute
+		router.ServeHTTP(w, req)
+
+		// Verify
+		assert.Equal(tb, http.StatusOK, w.Code)
+
+		var response dto.OperationFiltersResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(tb, err)
+
+		// Verify empty results
+		assert.Len(tb, response.Statuses, 0)
+		assert.Len(tb, response.Operations, 0)
+		assert.Len(tb, response.Protocols, 0)
+
+		// Verify mock expectations
+		userSvc.AssertExpectations(tb)
+		workflowSvc.AssertExpectations(tb)
+	})
+}
+
+func TestGetOperationFilters_Failure_Unauthorized(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Retrieve necessary services and router from the context
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+		router := ctx.Router()
+		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		req := httptest.NewRequest("GET", "/api/operations/filters", nil)
+		req.Host = domain
+		w := httptest.NewRecorder()
+
+		// Execute
+		router.ServeHTTP(w, req)
+
+		// Verify
+		assert.Equal(tb, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestGetOperationFilters_Failure_WorkflowServiceError(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Retrieve necessary services and router from the context
+		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+		router := ctx.Router()
+		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		// Mock data
+		mockUser := &models.User{
+			Model: gorm.Model{ID: 1},
+			Email: "test@example.com",
+		}
+
+		// Mock expectations - return error
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.On("ListDistinctWorkflowFilters", mock.Anything, uint(1), mock.Anything).
+			Return(nil, assert.AnError).Once()
+
+		// Create valid JWT token using the context's identity
+		pk := ctx.Config().Config().Core.Identity.PrivateKey()
+		jwtToken, err := jwt.CreateToken(pk, ctx.Config().Config().Core.Domain, "1", jwt.PurposeLogin, 90*24*time.Hour)
+		require.NoError(tb, err, "Failed to generate test JWT")
+
+		req := httptest.NewRequest("GET", "/api/operations/filters", nil)
+		req.Host = domain
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
+		w := httptest.NewRecorder()
+
+		// Execute
+		router.ServeHTTP(w, req)
+
+		// Verify
+		assert.Equal(tb, http.StatusInternalServerError, w.Code)
 
 		// Verify mock expectations
 		userSvc.AssertExpectations(tb)
@@ -250,11 +439,11 @@ func TestGetOperation_Success(t *testing.T) {
 		assert.Equal(tb, models.RequestStatusCompleted, response.Status)
 		assert.Equal(tb, "Upload completed", response.StatusMessage)
 		assert.InDelta(tb, float64(66.67), response.ProgressPercent, 0.005)
-		assert.Equal(tb, 3, response.TotalSteps)
-		assert.Equal(tb, 2, response.CurrentStep)
+		assert.Equal(tb, int64(3), *response.TotalSteps)
+		assert.Equal(tb, int64(2), *response.CurrentStep)
 
 		// Verify CID - use the same CID that was created in the test
-		assert.Equal(tb, testCID, response.CID)
+		assert.Equal(tb, &testCID, response.CID)
 
 		// Verify mock expectations
 		userSvc.AssertExpectations(tb)

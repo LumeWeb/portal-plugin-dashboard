@@ -114,6 +114,17 @@ func (a *API) buildOperationRoutes(authMw echo.MiddlewareFunc, accessMw echo.Mid
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),
 		),
+		router.NewRoute(http.MethodGet, "/api/operations/filters", a.getOperationFilters,
+			router.WithSwaggerOptions(
+				router.WithSummary("Get Operation Filters"),
+				router.WithDescription("Retrieves distinct filter values for operations (statuses, operations, protocols)"),
+				router.WithSuccessResponse(http.StatusOK, "Distinct filter values for operations",
+					router.WithJSONContent(dto.OperationFiltersResponse{}),
+				),
+			),
+			router.WithAccess(core.ACCESS_USER_ROLE),
+			router.WithMiddlewares(authMw, accessMw),
+		),
 		router.NewRoute(http.MethodGet, "/api/operations/:id", a.getOperation,
 			router.WithSwaggerOptions(
 				router.WithSummary("Get Operation Details"),
@@ -217,6 +228,27 @@ func (a *API) getOperation(c echo.Context) error {
 	response := a.convertWorkflowInstanceToOperationDetailResponse(instance, status)
 	var responseDto dto.OperationDetailResponse
 	return httputil.EncodeResponse(ctx, response, &responseDto)
+}
+
+func (a *API) getOperationFilters(c echo.Context) error {
+	ctx := httputil.Context(c)
+	userID, ok := a.getUser(ctx)
+	if !ok {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
+	}
+
+	// Use workflow service instead of request service
+	workflowSvc := core.GetService[core.WorkflowService](a.ctx, core.WORKFLOW_SERVICE)
+
+	// Get distinct filter values
+	filters, err := workflowSvc.ListDistinctWorkflowFilters(ctx.Request().Context(), userID, nil)
+	if err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	response := &dto.OperationFiltersResponse{}
+
+	return httputil.EncodeResponse(ctx, filters, response)
 }
 
 func (a *API) wsOperations(c echo.Context) error {

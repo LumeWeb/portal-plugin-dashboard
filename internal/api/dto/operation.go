@@ -5,6 +5,7 @@ import (
 
 	z "github.com/Oudwins/zog"
 	"github.com/ipfs/go-cid"
+	"github.com/samber/lo"
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/portal/db/models"
 )
@@ -12,6 +13,7 @@ import (
 var (
 	_ httputil.DTOResponse[*OperationListItem]       = (*OperationListItem)(nil)
 	_ httputil.DTOResponse[*OperationDetailResponse] = (*OperationDetailResponse)(nil)
+	_ httputil.DTOResponse[map[string][]string]      = (*OperationFiltersResponse)(nil)
 )
 
 type OperationRequest struct {
@@ -94,6 +96,21 @@ func (r *OperationDetailResponse) FromModel(model *OperationDetailResponse) erro
 	return nil
 }
 
+type OperationFiltersResponse struct {
+	Statuses   []models.RequestStatusType `json:"statuses"`
+	Operations []string                   `json:"operations"`
+	Protocols  []string                   `json:"protocols"`
+}
+
+func (r *OperationFiltersResponse) FromModel(model map[string][]string) error {
+	r.Statuses = lo.Map(model["status"], func(s string, _ int) models.RequestStatusType {
+		return models.RequestStatusType(s)
+	})
+	r.Operations = model["operation"]
+	r.Protocols = model["protocol"]
+	return nil
+}
+
 // WebSocket event structure for operations
 type OperationEvent struct {
 	Channel string                `json:"channel"`
@@ -103,14 +120,14 @@ type OperationEvent struct {
 }
 
 type OperationEventPayload struct {
-	IDs                   []uint64                 `json:"ids"`
+	IDs                   []uint64                  `json:"ids"`
 	Status                *models.RequestStatusType `json:"status,omitempty"`
-	ProgressPercent       *float64                 `json:"progress_percent,omitempty"`
-	UpdatedAt             time.Time                `json:"updated_at"`
-	StatusMessage         *string                  `json:"status_message,omitempty"`
-	EstimatedCompletionAt *time.Time               `json:"estimated_completion_at,omitempty"`
-	Error                 *string                  `json:"error,omitempty"`
-	CID                   *cid.Cid                 `json:"cid,omitempty"`
-	TotalSteps            *int64                   `json:"total_steps,omitempty"`
-	CurrentStep           *int64                   `json:"current_step,omitempty"`
+	ProgressPercent       *float64                  `json:"progress_percent,omitempty"`
+	UpdatedAt             time.Time                 `json:"updated_at"`
+	StatusMessage         *string                   `json:"status_message,omitempty"`
+	EstimatedCompletionAt *time.Time                `json:"estimated_completion_at,omitempty"`
+	Error                 *string                   `json:"error,omitempty"`
+	CID                   *cid.Cid                  `json:"cid,omitempty"`
+	TotalSteps            *int64                    `json:"total_steps,omitempty"`
+	CurrentStep           *int64                    `json:"current_step,omitempty"`
 }
