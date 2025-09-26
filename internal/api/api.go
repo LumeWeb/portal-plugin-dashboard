@@ -14,10 +14,11 @@ import (
 	"time"
 
 	"go.lumeweb.com/portal-middleware/middleware"
+	"go.lumeweb.com/portal/service"
 	_ "golang.org/x/image/webp"
 
 	"github.com/gorilla/sessions"
-	"github.com/labstack/echo/v4" // Import echo
+	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/samber/lo"
@@ -31,7 +32,7 @@ import (
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	_ "go.lumeweb.com/portal-plugin-dashboard/internal/provider/providers"
-	"go.lumeweb.com/portal-plugin-dashboard/internal/service"
+	pluginService "go.lumeweb.com/portal-plugin-dashboard/internal/service"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/config"
 	"go.lumeweb.com/portal/core"
@@ -51,17 +52,19 @@ const (
 var _ core.API = (*API)(nil)
 
 type API struct {
-	ctx        core.Context
-	config     config.Manager
-	user       core.UserService
-	auth       core.AuthService
-	password   core.PasswordResetService
-	otp        core.OTPService
-	apiKey     service.APIKeyService
-	access     core.AccessService
-	logger     *core.Logger
-	http       core.HTTPService
-	requestSvc core.RequestService
+	ctx         core.Context
+	config      config.Manager
+	user        core.UserService
+	auth        core.AuthService
+	password    core.PasswordResetService
+	otp         core.OTPService
+	apiKey      pluginService.APIKeyService
+	access      core.AccessService
+	logger      *core.Logger
+	http        core.HTTPService
+	requestSvc  core.RequestService
+	workflowSvc core.WorkflowService
+	ops         core.OperationFinder
 }
 
 func (a *API) OpenAPIInfo() router.APIInfoDefinition {
@@ -89,11 +92,13 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			api.auth = ctx.Service(core.AUTH_SERVICE).(core.AuthService)
 			api.password = ctx.Service(core.PASSWORD_RESET_SERVICE).(core.PasswordResetService)
 			api.otp = ctx.Service(core.OTP_SERVICE).(core.OTPService)
-			api.apiKey = ctx.Service(service.API_KEY_SERVICE).(service.APIKeyService)
+			api.apiKey = ctx.Service(pluginService.API_KEY_SERVICE).(pluginService.APIKeyService)
 			api.access = ctx.Service(core.ACCESS_SERVICE).(core.AccessService)
 			api.logger = ctx.APILogger(api)
 			api.http = ctx.Service(core.HTTP_SERVICE).(core.HTTPService)
 			api.requestSvc = ctx.Service(core.REQUEST_SERVICE).(core.RequestService)
+			api.workflowSvc = ctx.Service(core.WORKFLOW_SERVICE).(core.WorkflowService)
+			api.ops = service.NewOperationFinder(ctx)
 
 			return nil
 		}),

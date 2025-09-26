@@ -7,6 +7,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/samber/lo"
 	"go.lumeweb.com/httputil"
+	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/db/models"
 )
 
@@ -97,18 +98,77 @@ func (r *OperationDetailResponse) FromModel(model *OperationDetailResponse) erro
 }
 
 type OperationFiltersResponse struct {
-	Statuses   []models.RequestStatusType `json:"statuses"`
-	Operations []string                   `json:"operations"`
-	Protocols  []string                   `json:"protocols"`
+	Statuses   []OperationFilterItem `json:"statuses"`
+	Operations []OperationFilterItem `json:"operations"`
+	Protocols  []OperationFilterItem `json:"protocols"`
 }
 
-func (r *OperationFiltersResponse) FromModel(model map[string][]string) error {
-	r.Statuses = lo.Map(model["status"], func(s string, _ int) models.RequestStatusType {
-		return models.RequestStatusType(s)
-	})
-	r.Operations = model["operation"]
-	r.Protocols = model["protocol"]
+func (r *OperationFiltersResponse) FromModel(_ map[string][]string) error {
 	return nil
+}
+
+func GetOperationDisplayNames(finder core.OperationFinder, operationStrings []string) []OperationFilterItem {
+	return lo.Map(operationStrings, func(operation string, i int) OperationFilterItem {
+		handler, _, err := finder.FindOperationHandler(operation)
+		if err != nil {
+			// If we can't find the handler, use the operation string as the display name
+			return OperationFilterItem{
+				Value: operation,
+				Name:  operation,
+			}
+		}
+		name := core.GetOperationDisplayName(handler)
+
+		return OperationFilterItem{
+			Value: operation,
+			Name:  name,
+		}
+	})
+}
+
+func GetProtocolDisplayNames(protocolStrings []string) []OperationFilterItem {
+	// Get all registered protocols and create a map of names to display names
+	protocolList := core.GetProtocolList()
+	protocolDisplayMap := make(map[string]string)
+	for _, protocol := range protocolList {
+		protocolDisplayMap[protocol.Name()] = protocol.DisplayName()
+	}
+
+	return lo.Map(protocolStrings, func(protocol string, i int) OperationFilterItem {
+		name := protocol
+
+		// Check if we have a display name for this protocol
+		if displayName, exists := protocolDisplayMap[protocol]; exists {
+			name = displayName
+		}
+
+		return OperationFilterItem{
+			Value: protocol,
+			Name:  name,
+		}
+	})
+}
+
+func GetStatusDisplayNames(statusStrings []string) []OperationFilterItem {
+	return lo.Map(statusStrings, func(status string, i int) OperationFilterItem {
+		name := status
+
+		// Try to parse as models.RequestStatusType
+		statusType := models.RequestStatusType(status)
+		if displayInfo, exists := core.GetRequestStatusDisplayInfo(statusType); exists {
+			name = displayInfo.Name
+		}
+
+		return OperationFilterItem{
+			Value: status,
+			Name:  name,
+		}
+	})
+}
+
+type OperationFilterItem struct {
+	Value string `json:"value"`
+	Name  string `json:"name"`
 }
 
 // WebSocket event structure for operations

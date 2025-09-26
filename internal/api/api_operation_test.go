@@ -173,9 +173,9 @@ func TestGetOperationFilters_Success(t *testing.T) {
 		}
 
 		mockFilters := map[string][]string{
-			"status":    {"completed", "pending", "failed"},
-			"operation": {"upload", "pin"},
-			"protocol":  {"s3", "ipfs"},
+			core.FilterRequestKeyStatuses:   {"completed", "pending", "failed"},
+			core.FilterRequestKeyOperations: {"upload", "pin"},
+			core.FilterRequestKeyProtocols:  {"s3", "ipfs"},
 		}
 
 		// Mock expectations
@@ -209,23 +209,40 @@ func TestGetOperationFilters_Success(t *testing.T) {
 		assert.Len(tb, response.Protocols, 2)  // s3, ipfs
 
 		// Verify content includes expected values
-		expectedStatuses := []models.RequestStatusType{
-			models.RequestStatusCompleted,
-			models.RequestStatusPending,
-			models.RequestStatusFailed,
-		}
+		expectedStatuses := []string{"completed", "pending", "failed"}
 		for _, status := range expectedStatuses {
-			assert.Contains(tb, response.Statuses, status)
+			found := false
+			for _, item := range response.Statuses {
+				if item.Value == status {
+					found = true
+					break
+				}
+			}
+			assert.True(tb, found, "Status %s not found in response", status)
 		}
 
 		expectedOperations := []string{"upload", "pin"}
 		for _, operation := range expectedOperations {
-			assert.Contains(tb, response.Operations, operation)
+			found := false
+			for _, item := range response.Operations {
+				if item.Value == operation {
+					found = true
+					break
+				}
+			}
+			assert.True(tb, found, "Operation %s not found in response", operation)
 		}
 
 		expectedProtocols := []string{"s3", "ipfs"}
 		for _, protocol := range expectedProtocols {
-			assert.Contains(tb, response.Protocols, protocol)
+			found := false
+			for _, item := range response.Protocols {
+				if item.Value == protocol {
+					found = true
+					break
+				}
+			}
+			assert.True(tb, found, "Protocol %s not found in response", protocol)
 		}
 
 		// Verify mock expectations
