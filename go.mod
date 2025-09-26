@@ -19,7 +19,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/gswagger v0.20.10
 	go.lumeweb.com/httputil v0.5.3
-	go.lumeweb.com/portal v0.4.2-0.20250926222741-4b692c1ae488
+	go.lumeweb.com/portal v0.4.2-0.20250927013046-41c69f1889b1
 	go.lumeweb.com/portal-middleware v0.3.1
 	go.lumeweb.com/portal-router v0.6.7
 	go.lumeweb.com/queryutil v0.3.14

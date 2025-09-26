@@ -147,9 +147,6 @@ func (a *API) listOperations(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	// Use workflow service instead of request service
-	workflowSvc := core.GetService[core.WorkflowService](a.ctx, core.WORKFLOW_SERVICE)
-
 	return queryutilHttp.ProcessListRequest(
 		c.Response(),
 		c.Request(),
@@ -157,7 +154,7 @@ func (a *API) listOperations(c echo.Context) error {
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*dto.OperationListItem, int64, error) {
 			reqCtx := ctx.Request().Context()
 			// Use ListWorkflowInstances instead of GetRequests
-			instances, total, err := workflowSvc.ListWorkflowInstances(reqCtx, userID, filters, sorts, pagination)
+			instances, total, err := a.workflowSvc.ListWorkflowInstances(reqCtx, userID, filters, sorts, pagination)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -165,7 +162,7 @@ func (a *API) listOperations(c echo.Context) error {
 			items := make([]*dto.OperationListItem, 0, len(instances))
 			for _, instance := range instances {
 				// Get workflow status for progress information
-				status, err := workflowSvc.GetWorkflowStatus(reqCtx, instance.Request.ID)
+				status, err := a.workflowSvc.GetWorkflowStatus(reqCtx, instance.Request.ID)
 				if err != nil {
 					// If we can't get status, use the request status
 					status = &core.WorkflowStatus{
@@ -205,11 +202,8 @@ func (a *API) getOperation(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	// Use workflow service instead of request service
-	workflowSvc := core.GetService[core.WorkflowService](a.ctx, core.WORKFLOW_SERVICE)
-
 	// Get workflow instance and verify ownership
-	instance, err := workflowSvc.GetWorkflowInstance(ctx.Request().Context(), userID, uint(paramDto.ID))
+	instance, err := a.workflowSvc.GetWorkflowInstance(ctx.Request().Context(), userID, uint(paramDto.ID))
 	if err != nil {
 		return ctx.Error(err, http.StatusNotFound)
 	}
@@ -217,7 +211,7 @@ func (a *API) getOperation(c echo.Context) error {
 	// instance should be non-nil here; if not, treat as not found upstream
 
 	// Get workflow status for detailed progress information
-	status, err := workflowSvc.GetWorkflowStatus(ctx.Request().Context(), instance.Request.ID)
+	status, err := a.workflowSvc.GetWorkflowStatus(ctx.Request().Context(), instance.Request.ID)
 	if err != nil {
 		// If we can't get status, use default values
 		status = &core.WorkflowStatus{
@@ -237,16 +231,17 @@ func (a *API) getOperationFilters(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	// Use workflow service instead of request service
-	workflowSvc := core.GetService[core.WorkflowService](a.ctx, core.WORKFLOW_SERVICE)
-
 	// Get distinct filter values
-	filters, err := workflowSvc.ListDistinctWorkflowFilters(ctx.Request().Context(), userID, nil)
+	filters, err := a.workflowSvc.ListDistinctWorkflowFilters(ctx.Request().Context(), userID, nil)
 	if err != nil {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	response := &dto.OperationFiltersResponse{}
+	response := &dto.OperationFiltersResponse{
+		Statuses:   dto.GetStatusDisplayNames(filters[core.FilterRequestKeyStatuses]),
+		Operations: dto.GetOperationDisplayNames(a.ops, filters[core.FilterRequestKeyOperations]),
+		Protocols:  dto.GetProtocolDisplayNames(filters[core.FilterRequestKeyProtocols]),
+	}
 
 	return httputil.EncodeResponse(ctx, filters, response)
 }
