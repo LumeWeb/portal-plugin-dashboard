@@ -20,7 +20,7 @@ require (
 	go.lumeweb.com/gswagger v0.20.10
 	go.lumeweb.com/httputil v0.5.3
 	go.lumeweb.com/portal v0.4.2-0.20250927013046-41c69f1889b1
-	go.lumeweb.com/portal-middleware v0.3.1
+	go.lumeweb.com/portal-middleware v0.3.3
 	go.lumeweb.com/portal-router v0.6.7
 	go.lumeweb.com/queryutil v0.3.14
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20250922174307-2f5de9e6503c
