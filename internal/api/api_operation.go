@@ -161,7 +161,7 @@ func (a *API) buildOperationRoutes(authMw echo.MiddlewareFunc, accessMw echo.Mid
 				router.WithSummary("Get Operation Filters"),
 				router.WithDescription("Retrieves distinct filter values for operations (statuses, operations, protocols)"),
 				router.WithSuccessResponse(http.StatusOK, "Distinct filter values for operations",
-					router.WithJSONContent(dto.OperationFiltersResponse{}),
+					router.WithJSONContent(queryutil.Response[*dto.OperationFiltersResponse]{}),
 				),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
@@ -285,7 +285,14 @@ func (a *API) getOperationFilters(c echo.Context) error {
 		Protocols:  dto.GetProtocolDisplayNames(filters[core.FilterRequestKeyProtocols]),
 	}
 
-	return httputil.EncodeResponse(ctx, filters, response)
+	// Set Content-Range header (using empty pagination since this is a single item)
+	queryutilHttp.SetContentRangeHeader(c.Response(), "filters", queryutil.Pagination{}, []*dto.OperationFiltersResponse{response}, 1)
+
+	// Build response using queryutil.BuildResponse
+	wrappedResponse := queryutil.BuildResponse[*dto.OperationFiltersResponse](response, 1)
+
+	// Encode response using queryutilHttp.EncodeJSON
+	return queryutilHttp.EncodeJSON(c.Response(), wrappedResponse)
 }
 
 func (a *API) wsOperations(c echo.Context) error {
