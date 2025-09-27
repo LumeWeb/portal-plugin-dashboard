@@ -33,11 +33,32 @@ func (a *API) convertWorkflowInstanceToOperationListItem(instance *core.Workflow
 	totalSteps := int64(status.TotalSteps)
 	currentStep := int64(status.CurrentStep)
 
+	// Get operation display name
+	operationDisplayName := instance.Request.Operation
+	if handler, _, err := a.ops.FindOperationHandler(instance.Request.Operation); err == nil {
+		operationDisplayName = core.GetOperationDisplayName(handler)
+	}
+
+	// Get protocol display name
+	protocolDisplayName := instance.Request.Protocol
+	if protocol := core.GetProtocol(instance.Request.Protocol); protocol != nil {
+		protocolDisplayName = protocol.DisplayName()
+	}
+
+	// Get status display name
+	statusDisplayName := string(status.Status)
+	if displayInfo, exists := core.GetRequestStatusDisplayInfo(status.Status); exists {
+		statusDisplayName = displayInfo.Name
+	}
+
 	return &dto.OperationListItem{
 		ID:                    uint64(instance.Request.ID),
 		Operation:             instance.Request.Operation,
+		OperationDisplayName:  operationDisplayName,
 		Protocol:              instance.Request.Protocol,
+		ProtocolDisplayName:   protocolDisplayName,
 		Status:                status.Status,
+		StatusDisplayName:     statusDisplayName,
 		StatusMessage:         status.Message,
 		ProgressPercent:       status.Progress,
 		StartedAt:             instance.Request.CreatedAt,
@@ -75,11 +96,32 @@ func (a *API) convertWorkflowInstanceToOperationDetailResponse(instance *core.Wo
 		currentStep = &val
 	}
 
+	// Get operation display name
+	operationDisplayName := instance.Request.Operation
+	if handler, _, err := a.ops.FindOperationHandler(instance.Request.Operation); err == nil {
+		operationDisplayName = core.GetOperationDisplayName(handler)
+	}
+
+	// Get protocol display name
+	protocolDisplayName := instance.Request.Protocol
+	if protocol := core.GetProtocol(instance.Request.Protocol); protocol != nil {
+		protocolDisplayName = protocol.DisplayName()
+	}
+
+	// Get status display name
+	statusDisplayName := string(status.Status)
+	if displayInfo, exists := core.GetRequestStatusDisplayInfo(status.Status); exists {
+		statusDisplayName = displayInfo.Name
+	}
+
 	return &dto.OperationDetailResponse{
 		ID:                    uint64(instance.Request.ID),
 		Operation:             instance.Request.Operation,
+		OperationDisplayName:  operationDisplayName,
 		Protocol:              instance.Request.Protocol,
+		ProtocolDisplayName:   protocolDisplayName,
 		Status:                status.Status,
+		StatusDisplayName:     statusDisplayName,
 		StatusMessage:         status.Message,
 		ProgressPercent:       status.Progress,
 		StartedAt:             instance.Request.CreatedAt,
