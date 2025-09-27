@@ -34,8 +34,11 @@ func (r *OperationRequest) ToModel() (*OperationRequest, error) {
 type OperationListItem struct {
 	ID                    uint64                   `json:"id" filter:"true" sort:"true"`
 	Operation             string                   `json:"operation" filter:"true" sort:"true"`
+	OperationDisplayName  string                   `json:"operation_display_name"`
 	Protocol              string                   `json:"protocol" filter:"true" sort:"true"`
+	ProtocolDisplayName   string                   `json:"protocol_display_name"`
 	Status                models.RequestStatusType `json:"status" filter:"true" sort:"true"`
+	StatusDisplayName     string                   `json:"status_display_name"`
 	StatusMessage         string                   `json:"status_message" filter:"true" sort:"true"`
 	ProgressPercent       float64                  `json:"progress_percent" filter:"true" sort:"true"`
 	StartedAt             time.Time                `json:"started_at" filter:"true" sort:"true"`
@@ -50,8 +53,11 @@ type OperationListItem struct {
 func (r *OperationListItem) FromModel(model *OperationListItem) error {
 	r.ID = model.ID
 	r.Operation = model.Operation
+	r.OperationDisplayName = model.OperationDisplayName
 	r.Protocol = model.Protocol
+	r.ProtocolDisplayName = model.ProtocolDisplayName
 	r.Status = model.Status
+	r.StatusDisplayName = model.StatusDisplayName
 	r.StatusMessage = model.StatusMessage
 	r.ProgressPercent = model.ProgressPercent
 	r.StartedAt = model.StartedAt
@@ -67,8 +73,11 @@ func (r *OperationListItem) FromModel(model *OperationListItem) error {
 type OperationDetailResponse struct {
 	ID                    uint64                   `json:"id"`
 	Operation             string                   `json:"operation"`
+	OperationDisplayName  string                   `json:"operation_display_name"`
 	Protocol              string                   `json:"protocol"`
+	ProtocolDisplayName   string                   `json:"protocol_display_name"`
 	Status                models.RequestStatusType `json:"status"`
+	StatusDisplayName     string                   `json:"status_display_name"`
 	StatusMessage         string                   `json:"status_message"`
 	ProgressPercent       float64                  `json:"progress_percent"`
 	StartedAt             time.Time                `json:"started_at"`
@@ -83,8 +92,11 @@ type OperationDetailResponse struct {
 func (r *OperationDetailResponse) FromModel(model *OperationDetailResponse) error {
 	r.ID = model.ID
 	r.Operation = model.Operation
+	r.OperationDisplayName = model.OperationDisplayName
 	r.Protocol = model.Protocol
+	r.ProtocolDisplayName = model.ProtocolDisplayName
 	r.Status = model.Status
+	r.StatusDisplayName = model.StatusDisplayName
 	r.StatusMessage = model.StatusMessage
 	r.ProgressPercent = model.ProgressPercent
 	r.StartedAt = model.StartedAt
