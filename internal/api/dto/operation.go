@@ -110,6 +110,10 @@ func (r *OperationDetailResponse) FromModel(model *OperationDetailResponse) erro
 }
 
 type OperationFiltersResponse struct {
+	Data OperationFiltersResponseData `json:"data"`
+}
+
+type OperationFiltersResponseData struct {
 	Statuses   []OperationFilterItem `json:"statuses"`
 	Operations []OperationFilterItem `json:"operations"`
 	Protocols  []OperationFilterItem `json:"protocols"`

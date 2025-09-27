@@ -280,19 +280,15 @@ func (a *API) getOperationFilters(c echo.Context) error {
 	}
 
 	response := &dto.OperationFiltersResponse{
-		Statuses:   dto.GetStatusDisplayNames(filters[core.FilterRequestKeyStatuses]),
-		Operations: dto.GetOperationDisplayNames(a.ops, filters[core.FilterRequestKeyOperations]),
-		Protocols:  dto.GetProtocolDisplayNames(filters[core.FilterRequestKeyProtocols]),
+		Data: dto.OperationFiltersResponseData{
+			Statuses:   dto.GetStatusDisplayNames(filters[core.FilterRequestKeyStatuses]),
+			Operations: dto.GetOperationDisplayNames(a.ops, filters[core.FilterRequestKeyOperations]),
+			Protocols:  dto.GetProtocolDisplayNames(filters[core.FilterRequestKeyProtocols]),
+		},
 	}
 
-	// Set Content-Range header (using empty pagination since this is a single item)
-	queryutilHttp.SetContentRangeHeader(c.Response(), "filters", queryutil.Pagination{}, []*dto.OperationFiltersResponse{response}, 1)
-
-	// Build response using queryutil.BuildResponse
-	wrappedResponse := queryutil.BuildResponse[*dto.OperationFiltersResponse](response, 1)
-
 	// Encode response using queryutilHttp.EncodeJSON
-	return queryutilHttp.EncodeJSON(c.Response(), wrappedResponse)
+	return queryutilHttp.EncodeJSON(c.Response(), response)
 }
 
 func (a *API) wsOperations(c echo.Context) error {
