@@ -138,8 +138,8 @@ func GetOperationDisplayNames(finder core.OperationFinder, operationStrings []st
 		// Get description if available from operation type display info
 		var description *string
 		if displayInfo, exists := core.GetOperationTypeDisplayInfo(handler.GlobalType()); exists {
-			if displayInfo.Description != nil && *displayInfo.Description != "" {
-				description = displayInfo.Description
+			if displayInfo.Description != "" {
+				description = &displayInfo.Description
 			}
 		}
 
@@ -186,8 +186,8 @@ func GetStatusDisplayNames(statusStrings []string) []OperationFilterItem {
 		statusType := models.RequestStatusType(status)
 		if displayInfo, exists := core.GetRequestStatusDisplayInfo(statusType); exists {
 			name = displayInfo.Name
-			if displayInfo.Description != nil && *displayInfo.Description != "" {
-				description = displayInfo.Description
+			if displayInfo.Description != "" {
+				description = &displayInfo.Description
 			}
 		}
 
