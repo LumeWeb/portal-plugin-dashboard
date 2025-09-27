@@ -134,10 +134,19 @@ func GetOperationDisplayNames(finder core.OperationFinder, operationStrings []st
 			}
 		}
 		name := core.GetOperationDisplayName(handler)
+		
+		// Get description if available from operation type display info
+		var description *string
+		if displayInfo, exists := core.GetOperationTypeDisplayInfo(handler.GlobalType()); exists {
+			if displayInfo.Description != nil && *displayInfo.Description != "" {
+				description = displayInfo.Description
+			}
+		}
 
 		return OperationFilterItem{
-			Value: operation,
-			Name:  name,
+			Value:       operation,
+			Name:        name,
+			Description: description,
 		}
 	})
 }
@@ -145,16 +154,19 @@ func GetOperationDisplayNames(finder core.OperationFinder, operationStrings []st
 func GetProtocolDisplayNames(protocolStrings []string) []OperationFilterItem {
 	// Get all registered protocols and create a map of names to display names
 	protocolList := core.GetProtocolList()
-	protocolDisplayMap := make(map[string]string)
+	protocolNameMap := make(map[string]string)
 	for _, protocol := range protocolList {
-		protocolDisplayMap[protocol.Name()] = protocol.DisplayName()
+		if protocol == nil {
+			continue
+		}
+		protocolNameMap[protocol.Name()] = protocol.DisplayName()
 	}
 
 	return lo.Map(protocolStrings, func(protocol string, i int) OperationFilterItem {
 		name := protocol
 
-		// Check if we have a display name for this protocol
-		if displayName, exists := protocolDisplayMap[protocol]; exists {
+		// Check if we have display name for this protocol
+		if displayName, exists := protocolNameMap[protocol]; exists {
 			name = displayName
 		}
 
@@ -168,23 +180,29 @@ func GetProtocolDisplayNames(protocolStrings []string) []OperationFilterItem {
 func GetStatusDisplayNames(statusStrings []string) []OperationFilterItem {
 	return lo.Map(statusStrings, func(status string, i int) OperationFilterItem {
 		name := status
+		var description *string
 
 		// Try to parse as models.RequestStatusType
 		statusType := models.RequestStatusType(status)
 		if displayInfo, exists := core.GetRequestStatusDisplayInfo(statusType); exists {
 			name = displayInfo.Name
+			if displayInfo.Description != nil && *displayInfo.Description != "" {
+				description = displayInfo.Description
+			}
 		}
 
 		return OperationFilterItem{
-			Value: status,
-			Name:  name,
+			Value:       status,
+			Name:        name,
+			Description: description,
 		}
 	})
 }
 
 type OperationFilterItem struct {
-	Value string `json:"value"`
-	Name  string `json:"name"`
+	Value       string  `json:"value"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
 }
 
 // WebSocket event structure for operations
