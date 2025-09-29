@@ -23,10 +23,11 @@ func (a *API) convertWorkflowInstanceToOperationListItem(instance *core.Workflow
 	}
 
 	// Create CID pointer if hash exists
-	var cidPtr *cid.Cid
+	var cidPtr *string
 	if instance.Request.Hash != nil {
 		cidVal := cid.NewCidV1(instance.Request.CIDType, instance.Request.Hash)
-		cidPtr = &cidVal
+		cidStr := cidVal.String()
+		cidPtr = &cidStr
 	}
 
 	// Create step pointers
@@ -79,10 +80,11 @@ func (a *API) convertWorkflowInstanceToOperationDetailResponse(instance *core.Wo
 	}
 
 	// Create CID pointer if hash exists
-	var cidPtr *cid.Cid
+	var cidPtr *string
 	if instance.Request.Hash != nil {
 		cidVal := cid.NewCidV1(instance.Request.CIDType, instance.Request.Hash)
-		cidPtr = &cidVal
+		cidStr := cidVal.String()
+		cidPtr = &cidStr
 	}
 
 	// Create step pointers if values are meaningful
