@@ -4,7 +4,6 @@ import (
 	"time"
 
 	z "github.com/Oudwins/zog"
-	"github.com/ipfs/go-cid"
 	"github.com/samber/lo"
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/portal/core"
@@ -134,7 +133,7 @@ func GetOperationDisplayNames(finder core.OperationFinder, operationStrings []st
 			}
 		}
 		name := core.GetOperationDisplayName(handler)
-		
+
 		// Get description if available from operation type display info
 		var description *string
 		if displayInfo, exists := core.GetOperationTypeDisplayInfo(handler.GlobalType()); exists {
