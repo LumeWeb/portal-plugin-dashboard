@@ -44,7 +44,7 @@ type OperationListItem struct {
 	StartedAt             time.Time                `json:"started_at" filter:"true" sort:"true"`
 	UpdatedAt             time.Time                `json:"updated_at" filter:"true" sort:"true"`
 	EstimatedCompletionAt *time.Time               `json:"estimated_completion_at,omitempty" filter:"true" sort:"true"`
-	CID                   *cid.Cid                 `json:"cid,omitempty" filter:"true" sort:"true"`
+	CID                   *string                  `json:"cid,omitempty" filter:"true" sort:"true"`
 	TotalSteps            *int64                   `json:"total_steps,omitempty" filter:"true" sort:"true"`
 	CurrentStep           *int64                   `json:"current_step,omitempty" filter:"true" sort:"true"`
 	Error                 *string                  `json:"error,omitempty" filter:"true" sort:"true"`
@@ -83,7 +83,7 @@ type OperationDetailResponse struct {
 	StartedAt             time.Time                `json:"started_at"`
 	UpdatedAt             time.Time                `json:"updated_at"`
 	EstimatedCompletionAt *time.Time               `json:"estimated_completion_at,omitempty"`
-	CID                   *cid.Cid                 `json:"cid,omitempty"`
+	CID                   *string                  `json:"cid,omitempty"`
 	TotalSteps            *int64                   `json:"total_steps,omitempty"`
 	CurrentStep           *int64                   `json:"current_step,omitempty"`
 	Error                 *string                  `json:"error,omitempty"`
@@ -221,7 +221,7 @@ type OperationEventPayload struct {
 	StatusMessage         *string                   `json:"status_message,omitempty"`
 	EstimatedCompletionAt *time.Time                `json:"estimated_completion_at,omitempty"`
 	Error                 *string                   `json:"error,omitempty"`
-	CID                   *cid.Cid                  `json:"cid,omitempty"`
+	CID                   *string                   `json:"cid,omitempty"`
 	TotalSteps            *int64                    `json:"total_steps,omitempty"`
 	CurrentStep           *int64                    `json:"current_step,omitempty"`
 }
