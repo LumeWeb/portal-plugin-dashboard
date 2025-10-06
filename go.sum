@@ -655,6 +655,8 @@ go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251002232245-a7ec646aadd4 h1:tCI
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251002232245-a7ec646aadd4/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251006121743-89fbf7868c68 h1:InWtV0mmhTcM5mq1+2oUcqYbS0ssoQWs6qsKHK/p1+k=
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251006121743-89fbf7868c68/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
+go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251006123106-19ce5aa9164a h1:6KOO8AOBKmJ9VveGlX33TWhbDtM5lV+LD9ZWHqE5/p4=
+go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251006123106-19ce5aa9164a/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
 go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20251002232245-a7ec646aadd4 h1:lQbvG4jFlqFclGheyOqNvwmwLCgzucCfTjI6hcXdeFQ=
 go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20251002232245-a7ec646aadd4/go.mod h1:kBGprau52kN8MFDt8tN4G6D/mzOESayQIcS1tgrIuxY=
 go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20251006121743-89fbf7868c68 h1:xBrjNCUr3nZqM2iF7VHHR1Eoa1HNwZAbomviWgiHOsQ=
