@@ -133,7 +133,7 @@ func (a *API) login(c echo.Context) error {
 		return ctx.Error(err, http.StatusUnauthorized)
 	}
 
-	_jwt, user, err := a.auth.LoginPassword(requestDto.Email, requestDto.Password, ctx.Request().RemoteAddr, requestDto.Remember)
+	_jwt, user, err := a.auth.LoginPassword(requestDto.Email, requestDto.Password, ctx.RealIP(), requestDto.Remember)
 	if err != nil || user == nil {
 		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
 		a.logger.Error("failed to login", zap.Error(acctErr))

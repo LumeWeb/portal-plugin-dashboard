@@ -206,7 +206,7 @@ func (a *API) authWithAPIKey(c echo.Context) error {
 	}
 
 	// Login with the validated user ID
-	_jwt, err := a.auth.LoginID(validatedKey.UserID, ctx.Request().RemoteAddr, false)
+	_jwt, err := a.auth.LoginID(validatedKey.UserID, ctx.RealIP(), false)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
