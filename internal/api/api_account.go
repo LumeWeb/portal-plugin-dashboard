@@ -253,7 +253,7 @@ func (a *API) verifyEmail(c echo.Context) error {
 		_, authErr := mcontext.GetAuthToken(ctx.Context)
 		if authErr != nil {
 			// User is not logged in, so we can proceed with auto-login
-			_jwt, loginErr := a.auth.LoginID(user.ID, ctx.Request().RemoteAddr, remember)
+			_jwt, loginErr := a.auth.LoginID(user.ID, ctx.RealIP(), remember)
 			if loginErr != nil {
 				acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, loginErr)
 				a.logger.Error("failed to auto-login after email verification", zap.Error(acctErr))
@@ -440,7 +440,7 @@ func (a *API) deleteAccount(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	err := a.user.RequestAccountDeletion(user, ctx.Request().RemoteAddr)
+	err := a.user.RequestAccountDeletion(user, ctx.RealIP())
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)

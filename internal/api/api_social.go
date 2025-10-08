@@ -154,7 +154,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 		m = user
 	}
 
-	_jwt, err := a.auth.LoginID(m.ID, ctx.Request().RemoteAddr, false)
+	_jwt, err := a.auth.LoginID(m.ID, ctx.RealIP(), false)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
