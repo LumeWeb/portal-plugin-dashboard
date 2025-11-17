@@ -3,7 +3,7 @@ module go.lumeweb.com/portal-plugin-dashboard
 go 1.24.3
 
 require (
-	github.com/Oudwins/zog v0.21.8
+	github.com/Oudwins/zog v0.21.9
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.90.0
 	github.com/aws/smithy-go v1.23.2
 	github.com/gabriel-vasile/mimetype v1.4.11
