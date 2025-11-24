@@ -25,7 +25,7 @@ require (
 	go.lumeweb.com/queryutil v0.3.15
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251007105956-9515ed1f2355
 	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20251007105956-9515ed1f2355
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.44.0
 	golang.org/x/image v0.33.0
 	gorm.io/gorm v1.31.1
