@@ -22,7 +22,7 @@ require (
 	go.lumeweb.com/portal v0.4.2-0.20251008065049-d7c36fc0769c
 	go.lumeweb.com/portal-middleware v0.3.3
 	go.lumeweb.com/portal-router v0.6.8
-	go.lumeweb.com/queryutil v0.3.14
+	go.lumeweb.com/queryutil v0.3.15
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251007105956-9515ed1f2355
 	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20251007105956-9515ed1f2355
 	go.uber.org/zap v1.27.0

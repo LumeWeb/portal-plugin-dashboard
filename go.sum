@@ -672,8 +672,8 @@ go.lumeweb.com/portal-middleware v0.3.3 h1:hoqSOPGhKGS8yEULhccFHUFckkVjS0JduEFSV
 go.lumeweb.com/portal-middleware v0.3.3/go.mod h1:FjxHJnUuSVlRF7SqWMm3QXEf5fgbZqfNrYUpCnUZ4kM=
 go.lumeweb.com/portal-router v0.6.8 h1:JSQZ6WfDJJgGQY1MFf1tV3mlp7SJPqTLibi/TxqxJvU=
 go.lumeweb.com/portal-router v0.6.8/go.mod h1:bwYA78HjpXdLo1GUQ3n6kiBPM7fcWXLJIqoTVlJK6p8=
-go.lumeweb.com/queryutil v0.3.14 h1:5shMSpEEUAKyrdgqpYkTIeA5FH1aXx0ZjP1ALCXo6kI=
-go.lumeweb.com/queryutil v0.3.14/go.mod h1:nLkIuXzugX8Ln24wsAbfTafvNmaTHLJhIUKWC1693G4=
+go.lumeweb.com/queryutil v0.3.15 h1:R2l6GAAne8rCgh1rGy5HQ54zvs8JJw3gRLjhmkd8SHk=
+go.lumeweb.com/queryutil v0.3.15/go.mod h1:nLkIuXzugX8Ln24wsAbfTafvNmaTHLJhIUKWC1693G4=
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251007105956-9515ed1f2355 h1:eQQaAwefoLF36w2Su31bXJS9GVMEnZ+NKqtiz2MaEeU=
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251007105956-9515ed1f2355/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
 go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20251007105956-9515ed1f2355 h1:6FzAyL47BNLzdbogWyx5bTDTXrezoe5YIcOFKndSY5M=
