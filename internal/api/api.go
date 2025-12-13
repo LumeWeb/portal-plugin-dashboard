@@ -15,7 +15,6 @@ import (
 
 	"go.lumeweb.com/portal-middleware/middleware"
 	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
-	apiKeyService "go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	"go.lumeweb.com/portal/service"
 	_ "golang.org/x/image/webp"
 
@@ -93,7 +92,7 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			api.auth = ctx.Service(core.AUTH_SERVICE).(core.AuthService)
 			api.password = ctx.Service(core.PASSWORD_RESET_SERVICE).(core.PasswordResetService)
 			api.otp = ctx.Service(core.OTP_SERVICE).(core.OTPService)
-			api.apiKey = ctx.Service(apiKeyService.API_KEY_SERVICE).(pluginCore.APIKeyService)
+			api.apiKey = ctx.Service(pluginCore.API_KEY_SERVICE).(pluginCore.APIKeyService)
 			api.access = ctx.Service(core.ACCESS_SERVICE).(core.AccessService)
 			api.logger = ctx.APILogger(api)
 			api.http = ctx.Service(core.HTTP_SERVICE).(core.HTTPService)
