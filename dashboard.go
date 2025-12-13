@@ -23,13 +23,13 @@ var mailerTemplates embed.FS
 
 type APIConfig = pluginConfig.APIConfig
 
-func init() {
+func GetPluginInfo() core.PluginInfo {
 	templates, err := service.MailerTemplatesFromEmbed(&mailerTemplates, "")
 	if err != nil {
 		panic(err)
 	}
 
-	core.RegisterPlugin(core.PluginInfo{
+	return core.PluginInfo{
 		ID:      internal.PLUGIN_NAME,
 		Version: build.GetInfo(),
 		Depends: []string{"core"},
@@ -75,5 +75,9 @@ func init() {
 		},
 		MailerTemplates: templates,
 		WebBundles:      core.NewWebBundles(core.NewWebBundle(portal_plugin_dashboard.GetFS(), core.WithWebBundleTargetApps("dashboard"))),
-	})
+	}
+}
+
+func init() {
+	core.RegisterPlugin(GetPluginInfo())
 }
