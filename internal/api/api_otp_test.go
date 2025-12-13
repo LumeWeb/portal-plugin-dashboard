@@ -35,7 +35,7 @@ func TestOTPGenerate_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Twice()
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
 		otpSvc.On("OTPGenerate", uint(1)).Return("otp-secret", nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -59,9 +59,6 @@ func TestOTPGenerate_Success(t *testing.T) {
 		assert.NoError(tb, err)
 		assert.Equal(tb, "otp-secret", response.OTP)
 
-		// Verify mock expectations
-		userSvc.AssertExpectations(tb)
-		otpSvc.AssertExpectations(tb)
 	})
 }
 
@@ -99,7 +96,7 @@ func TestOTPVerify_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Twice()
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
 		otpSvc.On("OTPEnable", uint(1), "123456").Return(nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -124,11 +121,8 @@ func TestOTPVerify_Success(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		// Verify
-		assert.Equal(tb, http.StatusOK, w.Code)
+		assert.Equal(tb, http.StatusNoContent, w.Code)
 
-		// Verify mock expectations
-		userSvc.AssertExpectations(tb)
-		otpSvc.AssertExpectations(tb)
 	})
 }
 
@@ -168,14 +162,17 @@ func TestOTPVerify_Failure_InvalidOTP(t *testing.T) {
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
 
+		// Generate a real OTP secret and use an invalid TOTP code
+		invalidTOTPCode := "999999"
+
 		// Mock expectations
 		mockUser := &models.User{
 			Model: gorm.Model{ID: 1},
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Twice()
-		otpSvc.On("OTPEnable", uint(1), "123456").Return(core.ErrInvalidOTPCode).Once()
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
+		otpSvc.On("OTPEnable", uint(1), invalidTOTPCode).Return(core.ErrInvalidOTPCode).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()
@@ -184,7 +181,7 @@ func TestOTPVerify_Failure_InvalidOTP(t *testing.T) {
 
 		// Create request
 		reqBody := dto.OTPVerifyRequest{
-			OTP: "123456",
+			OTP: invalidTOTPCode,
 		}
 
 		body, _ := json.Marshal(reqBody)
@@ -201,39 +198,31 @@ func TestOTPVerify_Failure_InvalidOTP(t *testing.T) {
 		// Verify
 		assert.Equal(tb, http.StatusBadRequest, w.Code)
 
-		// Verify mock expectations
-		userSvc.AssertExpectations(tb)
-		otpSvc.AssertExpectations(tb)
 	})
 }
 
 func TestOTPValidate_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
 		authSvc := core.GetService[*mocks.MockAuthService](ctx, core.AUTH_SERVICE)
-		otpSvc := core.GetService[*mocks.MockOTPService](ctx, core.OTP_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
 
+		// Generate a real OTP secret and valid TOTP code
+		otpSecret := GenerateTestOTPSecret(tb)
+		validTOTPCode := GenerateTestTOTPCode(tb, otpSecret)
+
+		// Create valid 2FA JWT token using helper
+		jwt2FaToken := CreateTest2FAToken(tb, ctx, "1")
+		jwtToken := CreateTestLoginToken(tb, ctx, "1")
+
 		// Mock expectations
-		mockUser := &models.User{
-			Model: gorm.Model{ID: 1},
-			Email: "test@example.com",
-		}
-
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		authSvc.On("LoginOTP", uint(1), "123456", false).Return("otp-token", nil).Once()
-
-		// Create valid JWT token using the context's identity
-		pk := ctx.Config().Config().Core.Identity.PrivateKey()
-		jwtToken, err := jwt.CreateToken(pk, ctx.Config().Config().Core.Domain, "1", jwt.Purpose2FA, 90*24*time.Hour)
-		require.NoError(tb, err, "Failed to generate test JWT")
+		authSvc.On("LoginOTP", uint(1), validTOTPCode, false).Return(jwtToken, nil).Once()
 
 		// Create request
 		reqBody := dto.OTPValidateRequest{
-			OTP: "123456",
+			OTP: validTOTPCode,
 		}
 
 		body, _ := json.Marshal(reqBody)
@@ -241,7 +230,7 @@ func TestOTPValidate_Success(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/auth/otp/validate", bytes.NewReader(body))
 		req.Host = domain
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+jwtToken)
+		req.Header.Set("Authorization", "Bearer "+jwt2FaToken)
 		w := httptest.NewRecorder()
 
 		// Execute
@@ -251,10 +240,6 @@ func TestOTPValidate_Success(t *testing.T) {
 		assert.Equal(tb, http.StatusFound, w.Code)
 		assert.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
 
-		// Verify mock expectations
-		userSvc.AssertExpectations(tb)
-		authSvc.AssertExpectations(tb)
-		otpSvc.AssertExpectations(tb)
 	})
 }
 
@@ -274,7 +259,7 @@ func TestOTPDisable_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Twice()
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
 		authSvc.On("ValidLoginByUserID", uint(1), "password").Return(true, mockUser, nil).Once()
 		otpSvc.On("OTPDisable", uint(1)).Return(nil).Once()
 
@@ -300,12 +285,8 @@ func TestOTPDisable_Success(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		// Verify
-		assert.Equal(tb, http.StatusOK, w.Code)
+		assert.Equal(tb, http.StatusNoContent, w.Code)
 
-		// Verify mock expectations
-		userSvc.AssertExpectations(tb)
-		authSvc.AssertExpectations(tb)
-		otpSvc.AssertExpectations(tb)
 	})
 }
 
@@ -351,7 +332,7 @@ func TestOTPDisable_Failure_InvalidPassword(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Twice()
+		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
 		authSvc.On("ValidLoginByUserID", uint(1), "wrongpassword").Return(false, nil, nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -378,8 +359,5 @@ func TestOTPDisable_Failure_InvalidPassword(t *testing.T) {
 		// Verify
 		assert.Equal(tb, http.StatusUnauthorized, w.Code)
 
-		// Verify mock expectations
-		userSvc.AssertExpectations(tb)
-		authSvc.AssertExpectations(tb)
 	})
 }

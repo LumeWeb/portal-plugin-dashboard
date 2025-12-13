@@ -1,8 +1,10 @@
-package service
+package api_key
 
 import (
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/google/uuid"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
@@ -12,7 +14,6 @@ import (
 	"go.lumeweb.com/queryutil"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"time"
 )
 
 const API_KEY_SERVICE = "api_key"
@@ -20,16 +21,6 @@ const API_KEY_SERVICE = "api_key"
 var (
 	PurposeAPI jwt.Purpose = "api"
 )
-
-type APIKeyService interface {
-	core.Service
-	CreateAPIKey(userID uint, name string) (*pluginDb.APIKey, error)
-	GetAPIKeys(userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.APIKey, int64, error)
-	DeleteAPIKey(userID uint, uuid uuid.UUID) error
-	ValidateAPIKey(userID uint, keyUUID uuid.UUID) (*pluginDb.APIKey, error)
-}
-
-var _ APIKeyService = (*APIKeyServiceDefault)(nil)
 
 type APIKeyServiceDefault struct {
 	ctx    core.Context
@@ -40,17 +31,17 @@ type APIKeyServiceDefault struct {
 }
 
 func NewAPIKeyService() (core.Service, []core.ContextBuilderOption, error) {
-	service := &APIKeyServiceDefault{}
+	svc := &APIKeyServiceDefault{}
 
-	return service, core.ContextOptions(
+	return svc, core.ContextOptions(
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			service.ctx = ctx
-			service.db = ctx.DB()
-			service.logger = ctx.ServiceLogger(service)
-			service.user = core.GetService[core.UserService](ctx, core.USER_SERVICE)
-			service.auth = core.GetService[core.AuthService](ctx, core.AUTH_SERVICE)
+			svc.ctx = ctx
+			svc.db = ctx.DB()
+			svc.logger = ctx.ServiceLogger(svc)
+			svc.user = core.GetService[core.UserService](ctx, core.USER_SERVICE)
+			svc.auth = core.GetService[core.AuthService](ctx, core.AUTH_SERVICE)
 
-			return service.db.AutoMigrate(&pluginDb.APIKey{})
+			return svc.db.AutoMigrate(&pluginDb.APIKey{})
 		}),
 	), nil
 }

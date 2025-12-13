@@ -12,7 +12,7 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/db/migrations"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
-	pluginService "go.lumeweb.com/portal-plugin-dashboard/internal/service"
+	apiKeyService "go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/service"
 	"go.lumeweb.com/web/go/portal-plugin-dashboard"
@@ -57,9 +57,9 @@ func GetPluginInfo() core.PluginInfo {
 		Services: func() ([]core.ServiceInfo, error) {
 			return []core.ServiceInfo{
 				{
-					ID: pluginService.API_KEY_SERVICE,
+					ID: apiKeyService.API_KEY_SERVICE,
 					Factory: func() (core.Service, []core.ContextBuilderOption, error) {
-						return pluginService.NewAPIKeyService()
+						return apiKeyService.NewAPIKeyService()
 					},
 					Depends: []string{core.USER_SERVICE, core.AUTH_SERVICE},
 				},

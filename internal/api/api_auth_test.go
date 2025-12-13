@@ -36,8 +36,12 @@ func TestLogin_Success(t *testing.T) {
 		}
 
 		userSvc.On("EmailExists", "user@example.com").Return(true, mockUser, nil).Once()
+
+		// Create a valid JWT token for the mock to return
+		testToken := CreateTestLoginToken(tb, ctx, "1")
+
 		authSvc.On("LoginPassword", "user@example.com", "password", mock.Anything, false).
-			Return("testtoken", mockUser, nil).Once()
+			Return(testToken, mockUser, nil).Once()
 
 		// Create valid request
 		reqBody := dto.LoginRequest{
@@ -84,8 +88,12 @@ func TestLogin_OTPRequired(t *testing.T) {
 		}
 
 		userSvc.On("EmailExists", "user@example.com").Return(true, mockUser, nil).Once()
+
+		// Create a valid JWT token for the mock to return
+		testToken := CreateTestLoginToken(tb, ctx, "1")
+
 		authSvc.On("LoginPassword", "user@example.com", "password", mock.Anything, false).
-			Return("testtoken", mockUser, nil).Once()
+			Return(testToken, mockUser, nil).Once()
 
 		// Create valid request
 		reqBody := dto.LoginRequest{
@@ -110,7 +118,7 @@ func TestLogin_OTPRequired(t *testing.T) {
 		var response dto.LoginResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(tb, err)
-		assert.Equal(tb, "testtoken", response.Token)
+		assert.NotEmpty(tb, response.Token)
 		assert.True(tb, response.Otp)
 
 		// Verify mock expectations

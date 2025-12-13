@@ -1,29 +1,30 @@
-package service
+package api_key
 
 import (
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/queryutil"
-	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"gorm.io/gorm"
 )
 
 func TestMain(m *testing.M) {
 	coreTesting.WithDBAndOptions(m,
-		// Register APIKeyService at package level
-		coreTesting.NewServiceRegistrationOption(API_KEY_SERVICE, NewAPIKeyService),
+		coreTesting.WithService(API_KEY_SERVICE, NewAPIKeyService),
 	)
 }
 
 func TestAPIKeyService_CreateAPIKey(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -51,7 +52,7 @@ func TestAPIKeyService_CreateAPIKey(t *testing.T) {
 
 func TestAPIKeyService_CreateAPIKey_DuplicateName(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -86,7 +87,7 @@ func TestAPIKeyService_CreateAPIKey_DuplicateName(t *testing.T) {
 
 func TestAPIKeyService_GetAPIKeys(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
@@ -146,7 +147,7 @@ func TestAPIKeyService_GetAPIKeys(t *testing.T) {
 
 func TestAPIKeyService_GetAPIKeys_FilterByName(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -188,7 +189,7 @@ func TestAPIKeyService_GetAPIKeys_FilterByName(t *testing.T) {
 
 func TestAPIKeyService_GetAPIKeys_SortByNameAscending(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -221,7 +222,7 @@ func TestAPIKeyService_GetAPIKeys_SortByNameAscending(t *testing.T) {
 
 func TestAPIKeyService_GetAPIKeys_SortByNameDescending(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -254,7 +255,7 @@ func TestAPIKeyService_GetAPIKeys_SortByNameDescending(t *testing.T) {
 
 func TestAPIKeyService_GetAPIKeys_Pagination(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -307,7 +308,7 @@ func TestAPIKeyService_GetAPIKeys_Pagination(t *testing.T) {
 
 func TestAPIKeyService_DeleteAPIKey(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
@@ -348,7 +349,7 @@ func TestAPIKeyService_DeleteAPIKey(t *testing.T) {
 
 func TestAPIKeyService_DeleteAPIKey_NonExistent(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -363,7 +364,7 @@ func TestAPIKeyService_DeleteAPIKey_NonExistent(t *testing.T) {
 
 func TestAPIKeyService_DeleteAPIKey_WrongUser(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
@@ -388,7 +389,7 @@ func TestAPIKeyService_DeleteAPIKey_WrongUser(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -412,7 +413,7 @@ func TestAPIKeyService_ValidateAPIKey(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey_NonExistent(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
@@ -428,7 +429,7 @@ func TestAPIKeyService_ValidateAPIKey_NonExistent(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey_WrongUser(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
@@ -449,7 +450,7 @@ func TestAPIKeyService_ValidateAPIKey_WrongUser(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey_Expired(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
