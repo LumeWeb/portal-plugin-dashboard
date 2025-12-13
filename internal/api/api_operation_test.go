@@ -148,8 +148,8 @@ func TestListOperations_Success(t *testing.T) {
 		assert.Equal(tb, int64(2), *op2.TotalSteps)
 		assert.Equal(tb, int64(0), *op2.CurrentStep)
 
-		// Verify CID - use the same CID that was created in the test
-		assert.Equal(tb, &cid1, op1.CID)
+		// Verify CID - convert to string for comparison
+		assert.Equal(tb, cid1.String(), *op1.CID)
 
 		// Verify mock expectations
 		userSvc.AssertExpectations(tb)
@@ -204,15 +204,15 @@ func TestGetOperationFilters_Success(t *testing.T) {
 		assert.NoError(tb, err)
 
 		// Verify we have distinct values
-		assert.Len(tb, response.Statuses, 3)   // completed, pending, failed
-		assert.Len(tb, response.Operations, 2) // upload, pin
-		assert.Len(tb, response.Protocols, 2)  // s3, ipfs
+		assert.Len(tb, response.Data.Statuses, 3)   // completed, pending, failed
+		assert.Len(tb, response.Data.Operations, 2) // upload, pin
+		assert.Len(tb, response.Data.Protocols, 2)  // s3, ipfs
 
 		// Verify content includes expected values
 		expectedStatuses := []string{"completed", "pending", "failed"}
 		for _, status := range expectedStatuses {
 			found := false
-			for _, item := range response.Statuses {
+			for _, item := range response.Data.Statuses {
 				if item.Value == status {
 					found = true
 					break
@@ -224,7 +224,7 @@ func TestGetOperationFilters_Success(t *testing.T) {
 		expectedOperations := []string{"upload", "pin"}
 		for _, operation := range expectedOperations {
 			found := false
-			for _, item := range response.Operations {
+			for _, item := range response.Data.Operations {
 				if item.Value == operation {
 					found = true
 					break
@@ -236,7 +236,7 @@ func TestGetOperationFilters_Success(t *testing.T) {
 		expectedProtocols := []string{"s3", "ipfs"}
 		for _, protocol := range expectedProtocols {
 			found := false
-			for _, item := range response.Protocols {
+			for _, item := range response.Data.Protocols {
 				if item.Value == protocol {
 					found = true
 					break
@@ -292,9 +292,9 @@ func TestGetOperationFilters_EmptyResult(t *testing.T) {
 		assert.NoError(tb, err)
 
 		// Verify empty results
-		assert.Len(tb, response.Statuses, 0)
-		assert.Len(tb, response.Operations, 0)
-		assert.Len(tb, response.Protocols, 0)
+		assert.Len(tb, response.Data.Statuses, 0)
+		assert.Len(tb, response.Data.Operations, 0)
+		assert.Len(tb, response.Data.Protocols, 0)
 
 		// Verify mock expectations
 		userSvc.AssertExpectations(tb)
@@ -459,8 +459,8 @@ func TestGetOperation_Success(t *testing.T) {
 		assert.Equal(tb, int64(3), *response.TotalSteps)
 		assert.Equal(tb, int64(2), *response.CurrentStep)
 
-		// Verify CID - use the same CID that was created in the test
-		assert.Equal(tb, &testCID, response.CID)
+		// Verify CID - convert to string for comparison
+		assert.Equal(tb, testCID.String(), *response.CID)
 
 		// Verify mock expectations
 		userSvc.AssertExpectations(tb)

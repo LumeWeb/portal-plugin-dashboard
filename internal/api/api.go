@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"go.lumeweb.com/portal-middleware/middleware"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
+	apiKeyService "go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	"go.lumeweb.com/portal/service"
 	_ "golang.org/x/image/webp"
 
@@ -32,7 +34,6 @@ import (
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	_ "go.lumeweb.com/portal-plugin-dashboard/internal/provider/providers"
-	pluginService "go.lumeweb.com/portal-plugin-dashboard/internal/service"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/config"
 	"go.lumeweb.com/portal/core"
@@ -58,7 +59,7 @@ type API struct {
 	auth        core.AuthService
 	password    core.PasswordResetService
 	otp         core.OTPService
-	apiKey      pluginService.APIKeyService
+	apiKey      pluginCore.APIKeyService
 	access      core.AccessService
 	logger      *core.Logger
 	http        core.HTTPService
@@ -92,7 +93,7 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			api.auth = ctx.Service(core.AUTH_SERVICE).(core.AuthService)
 			api.password = ctx.Service(core.PASSWORD_RESET_SERVICE).(core.PasswordResetService)
 			api.otp = ctx.Service(core.OTP_SERVICE).(core.OTPService)
-			api.apiKey = ctx.Service(pluginService.API_KEY_SERVICE).(pluginService.APIKeyService)
+			api.apiKey = ctx.Service(apiKeyService.API_KEY_SERVICE).(pluginCore.APIKeyService)
 			api.access = ctx.Service(core.ACCESS_SERVICE).(core.AccessService)
 			api.logger = ctx.APILogger(api)
 			api.http = ctx.Service(core.HTTP_SERVICE).(core.HTTPService)

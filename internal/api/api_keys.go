@@ -15,7 +15,7 @@ import (
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
-	"go.lumeweb.com/portal-plugin-dashboard/internal/service"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/queryutil"
@@ -95,7 +95,7 @@ func (a *API) createAPIKey(c echo.Context) error {
 		privateKey,
 		domain,
 		fmt.Sprintf("%d", user),
-		service.PurposeAPI,
+		api_key.PurposeAPI,
 		time.Hour*24*30, // 30 day expiry
 		jwt.WithClaims(&jwt.RegisteredClaims{
 			ID: apiKey.UUID.String(),

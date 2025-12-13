@@ -1,8 +1,8 @@
 template: testify
 template-data:
   unroll-variadic: true
-filename: "{{.InterfaceName}}.go"
+filename: "mock_{{.InterfaceName}}.go"
 packages:
-  go.lumeweb.com/portal-plugin-dashboard/internal/service:
+  go.lumeweb.com/portal-plugin-dashboard/core:
     interfaces:
-      APIKeyService: {}
+      APIKeyService:
