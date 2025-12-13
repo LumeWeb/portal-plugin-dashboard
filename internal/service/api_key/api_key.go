@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/db"
@@ -15,8 +16,6 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
-
-const API_KEY_SERVICE = "api_key"
 
 var (
 	PurposeAPI jwt.Purpose = "api"
@@ -47,7 +46,7 @@ func NewAPIKeyService() (core.Service, []core.ContextBuilderOption, error) {
 }
 
 func (s *APIKeyServiceDefault) ID() string {
-	return API_KEY_SERVICE
+	return pluginCore.API_KEY_SERVICE
 }
 
 func (s *APIKeyServiceDefault) CreateAPIKey(userID uint, name string) (*pluginDb.APIKey, error) {

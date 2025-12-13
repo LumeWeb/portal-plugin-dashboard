@@ -7,6 +7,8 @@ import (
 	"go.lumeweb.com/queryutil"
 )
 
+const API_KEY_SERVICE = "api_key"
+
 type APIKeyService interface {
 	core.Service
 	CreateAPIKey(userID uint, name string) (*models.APIKey, error)

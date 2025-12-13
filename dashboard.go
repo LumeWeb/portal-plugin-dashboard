@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"go.lumeweb.com/portal-plugin-dashboard/build"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api"
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
@@ -57,7 +58,7 @@ func GetPluginInfo() core.PluginInfo {
 		Services: func() ([]core.ServiceInfo, error) {
 			return []core.ServiceInfo{
 				{
-					ID: apiKeyService.API_KEY_SERVICE,
+					ID: pluginCore.API_KEY_SERVICE,
 					Factory: func() (core.Service, []core.ContextBuilderOption, error) {
 						return apiKeyService.NewAPIKeyService()
 					},
