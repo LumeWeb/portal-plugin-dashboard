@@ -15,6 +15,7 @@ require (
 	github.com/markbates/goth v1.82.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/pquerna/otp v1.5.0
+	github.com/prometheus/client_golang v1.22.0
 	github.com/samber/lo v1.52.0
 	github.com/sethvargo/go-password v0.3.1
 	github.com/stretchr/testify v1.11.1
@@ -28,7 +29,7 @@ require (
 	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20251007105956-9515ed1f2355
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.46.0
-	golang.org/x/image v0.33.0
+	golang.org/x/image v0.34.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -157,7 +158,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/pressly/goose/v3 v3.26.0 // indirect
-	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
