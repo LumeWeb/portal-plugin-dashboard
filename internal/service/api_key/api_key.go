@@ -163,10 +163,6 @@ func (s *APIKeyServiceDefault) ValidateAPIKey(ctx context.Context, userID uint, 
 				return nil, fmt.Errorf("invalid api key")
 			}
 
-			if err != nil {
-				return nil, fmt.Errorf("invalid api key")
-			}
-
 			return &apiKey, nil
 		},
 	)
