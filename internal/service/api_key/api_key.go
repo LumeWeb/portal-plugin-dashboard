@@ -151,19 +151,17 @@ func (s *APIKeyServiceDefault) ValidateAPIKey(ctx context.Context, userID uint, 
 			var apiKey pluginDb.APIKey
 
 			err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-				result := tx.Where(&pluginDb.APIKey{UUID: types.FromUUID(keyUUID), UserID: userID}).First(&apiKey)
-				if result.Error != nil {
-					return tx
-				}
-
-				// Check if key has expired (this is application logic, not DB operation)
-				if apiKey.Expires != nil && apiKey.Expires.Before(time.Now()) {
-					_ = tx.AddError(fmt.Errorf("invalid api key"))
-					return tx
-				}
-
-				return tx
+				return tx.Where(&pluginDb.APIKey{UUID: types.FromUUID(keyUUID), UserID: userID}).First(&apiKey)
 			})
+
+			if err != nil {
+				return nil, fmt.Errorf("invalid api key")
+			}
+
+			// Check if key has expired (this is application logic, not DB operation)
+			if apiKey.Expires != nil && apiKey.Expires.Before(time.Now()) {
+				return nil, fmt.Errorf("invalid api key")
+			}
 
 			if err != nil {
 				return nil, fmt.Errorf("invalid api key")
