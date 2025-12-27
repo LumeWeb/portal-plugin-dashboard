@@ -5,10 +5,15 @@
 package service
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	mock "github.com/stretchr/testify/mock"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
+	"go.lumeweb.com/portal/config"
+	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/queryutil"
+	"gorm.io/gorm"
 )
 
 // NewMockAPIKeyService creates a new instance of MockAPIKeyService. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -38,9 +43,101 @@ func (_m *MockAPIKeyService) EXPECT() *MockAPIKeyService_Expecter {
 	return &MockAPIKeyService_Expecter{mock: &_m.Mock}
 }
 
+// Config provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) Config() config.Manager {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Config")
+	}
+
+	var r0 config.Manager
+	if returnFunc, ok := ret.Get(0).(func() config.Manager); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(config.Manager)
+		}
+	}
+	return r0
+}
+
+// MockAPIKeyService_Config_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Config'
+type MockAPIKeyService_Config_Call struct {
+	*mock.Call
+}
+
+// Config is a helper method to define mock.On call
+func (_e *MockAPIKeyService_Expecter) Config() *MockAPIKeyService_Config_Call {
+	return &MockAPIKeyService_Config_Call{Call: _e.mock.On("Config")}
+}
+
+func (_c *MockAPIKeyService_Config_Call) Run(run func()) *MockAPIKeyService_Config_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_Config_Call) Return(manager config.Manager) *MockAPIKeyService_Config_Call {
+	_c.Call.Return(manager)
+	return _c
+}
+
+func (_c *MockAPIKeyService_Config_Call) RunAndReturn(run func() config.Manager) *MockAPIKeyService_Config_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Context provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) Context() core.Context {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Context")
+	}
+
+	var r0 core.Context
+	if returnFunc, ok := ret.Get(0).(func() core.Context); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(core.Context)
+		}
+	}
+	return r0
+}
+
+// MockAPIKeyService_Context_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Context'
+type MockAPIKeyService_Context_Call struct {
+	*mock.Call
+}
+
+// Context is a helper method to define mock.On call
+func (_e *MockAPIKeyService_Expecter) Context() *MockAPIKeyService_Context_Call {
+	return &MockAPIKeyService_Context_Call{Call: _e.mock.On("Context")}
+}
+
+func (_c *MockAPIKeyService_Context_Call) Run(run func()) *MockAPIKeyService_Context_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_Context_Call) Return(context core.Context) *MockAPIKeyService_Context_Call {
+	_c.Call.Return(context)
+	return _c
+}
+
+func (_c *MockAPIKeyService_Context_Call) RunAndReturn(run func() core.Context) *MockAPIKeyService_Context_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateAPIKey provides a mock function for the type MockAPIKeyService
-func (_mock *MockAPIKeyService) CreateAPIKey(userID uint, name string) (*models.APIKey, error) {
-	ret := _mock.Called(userID, name)
+func (_mock *MockAPIKeyService) CreateAPIKey(ctx context.Context, userID uint, name string) (*models.APIKey, error) {
+	ret := _mock.Called(ctx, userID, name)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateAPIKey")
@@ -48,18 +145,18 @@ func (_mock *MockAPIKeyService) CreateAPIKey(userID uint, name string) (*models.
 
 	var r0 *models.APIKey
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, string) (*models.APIKey, error)); ok {
-		return returnFunc(userID, name)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, string) (*models.APIKey, error)); ok {
+		return returnFunc(ctx, userID, name)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, string) *models.APIKey); ok {
-		r0 = returnFunc(userID, name)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, string) *models.APIKey); ok {
+		r0 = returnFunc(ctx, userID, name)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*models.APIKey)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, string) error); ok {
-		r1 = returnFunc(userID, name)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, string) error); ok {
+		r1 = returnFunc(ctx, userID, name)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -72,25 +169,31 @@ type MockAPIKeyService_CreateAPIKey_Call struct {
 }
 
 // CreateAPIKey is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - name string
-func (_e *MockAPIKeyService_Expecter) CreateAPIKey(userID interface{}, name interface{}) *MockAPIKeyService_CreateAPIKey_Call {
-	return &MockAPIKeyService_CreateAPIKey_Call{Call: _e.mock.On("CreateAPIKey", userID, name)}
+func (_e *MockAPIKeyService_Expecter) CreateAPIKey(ctx interface{}, userID interface{}, name interface{}) *MockAPIKeyService_CreateAPIKey_Call {
+	return &MockAPIKeyService_CreateAPIKey_Call{Call: _e.mock.On("CreateAPIKey", ctx, userID, name)}
 }
 
-func (_c *MockAPIKeyService_CreateAPIKey_Call) Run(run func(userID uint, name string)) *MockAPIKeyService_CreateAPIKey_Call {
+func (_c *MockAPIKeyService_CreateAPIKey_Call) Run(run func(ctx context.Context, userID uint, name string)) *MockAPIKeyService_CreateAPIKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(uint)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -101,22 +204,68 @@ func (_c *MockAPIKeyService_CreateAPIKey_Call) Return(aPIKey *models.APIKey, err
 	return _c
 }
 
-func (_c *MockAPIKeyService_CreateAPIKey_Call) RunAndReturn(run func(userID uint, name string) (*models.APIKey, error)) *MockAPIKeyService_CreateAPIKey_Call {
+func (_c *MockAPIKeyService_CreateAPIKey_Call) RunAndReturn(run func(ctx context.Context, userID uint, name string) (*models.APIKey, error)) *MockAPIKeyService_CreateAPIKey_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DB provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) DB() *gorm.DB {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DB")
+	}
+
+	var r0 *gorm.DB
+	if returnFunc, ok := ret.Get(0).(func() *gorm.DB); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gorm.DB)
+		}
+	}
+	return r0
+}
+
+// MockAPIKeyService_DB_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DB'
+type MockAPIKeyService_DB_Call struct {
+	*mock.Call
+}
+
+// DB is a helper method to define mock.On call
+func (_e *MockAPIKeyService_Expecter) DB() *MockAPIKeyService_DB_Call {
+	return &MockAPIKeyService_DB_Call{Call: _e.mock.On("DB")}
+}
+
+func (_c *MockAPIKeyService_DB_Call) Run(run func()) *MockAPIKeyService_DB_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_DB_Call) Return(dB *gorm.DB) *MockAPIKeyService_DB_Call {
+	_c.Call.Return(dB)
+	return _c
+}
+
+func (_c *MockAPIKeyService_DB_Call) RunAndReturn(run func() *gorm.DB) *MockAPIKeyService_DB_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // DeleteAPIKey provides a mock function for the type MockAPIKeyService
-func (_mock *MockAPIKeyService) DeleteAPIKey(userID uint, uuid1 uuid.UUID) error {
-	ret := _mock.Called(userID, uuid1)
+func (_mock *MockAPIKeyService) DeleteAPIKey(ctx context.Context, userID uint, uuid1 uuid.UUID) error {
+	ret := _mock.Called(ctx, userID, uuid1)
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeleteAPIKey")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uuid.UUID) error); ok {
-		r0 = returnFunc(userID, uuid1)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, userID, uuid1)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -129,25 +278,31 @@ type MockAPIKeyService_DeleteAPIKey_Call struct {
 }
 
 // DeleteAPIKey is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - uuid1 uuid.UUID
-func (_e *MockAPIKeyService_Expecter) DeleteAPIKey(userID interface{}, uuid1 interface{}) *MockAPIKeyService_DeleteAPIKey_Call {
-	return &MockAPIKeyService_DeleteAPIKey_Call{Call: _e.mock.On("DeleteAPIKey", userID, uuid1)}
+func (_e *MockAPIKeyService_Expecter) DeleteAPIKey(ctx interface{}, userID interface{}, uuid1 interface{}) *MockAPIKeyService_DeleteAPIKey_Call {
+	return &MockAPIKeyService_DeleteAPIKey_Call{Call: _e.mock.On("DeleteAPIKey", ctx, userID, uuid1)}
 }
 
-func (_c *MockAPIKeyService_DeleteAPIKey_Call) Run(run func(userID uint, uuid1 uuid.UUID)) *MockAPIKeyService_DeleteAPIKey_Call {
+func (_c *MockAPIKeyService_DeleteAPIKey_Call) Run(run func(ctx context.Context, userID uint, uuid1 uuid.UUID)) *MockAPIKeyService_DeleteAPIKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 uuid.UUID
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(uuid.UUID)
+			arg1 = args[1].(uint)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -158,14 +313,14 @@ func (_c *MockAPIKeyService_DeleteAPIKey_Call) Return(err error) *MockAPIKeyServ
 	return _c
 }
 
-func (_c *MockAPIKeyService_DeleteAPIKey_Call) RunAndReturn(run func(userID uint, uuid1 uuid.UUID) error) *MockAPIKeyService_DeleteAPIKey_Call {
+func (_c *MockAPIKeyService_DeleteAPIKey_Call) RunAndReturn(run func(ctx context.Context, userID uint, uuid1 uuid.UUID) error) *MockAPIKeyService_DeleteAPIKey_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetAPIKeys provides a mock function for the type MockAPIKeyService
-func (_mock *MockAPIKeyService) GetAPIKeys(userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.APIKey, int64, error) {
-	ret := _mock.Called(userID, filters, sorts, pagination)
+func (_mock *MockAPIKeyService) GetAPIKeys(ctx context.Context, userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.APIKey, int64, error) {
+	ret := _mock.Called(ctx, userID, filters, sorts, pagination)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetAPIKeys")
@@ -174,23 +329,23 @@ func (_mock *MockAPIKeyService) GetAPIKeys(userID uint, filters []queryutil.Crud
 	var r0 []*models.APIKey
 	var r1 int64
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) ([]*models.APIKey, int64, error)); ok {
-		return returnFunc(userID, filters, sorts, pagination)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) ([]*models.APIKey, int64, error)); ok {
+		return returnFunc(ctx, userID, filters, sorts, pagination)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) []*models.APIKey); ok {
-		r0 = returnFunc(userID, filters, sorts, pagination)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) []*models.APIKey); ok {
+		r0 = returnFunc(ctx, userID, filters, sorts, pagination)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*models.APIKey)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) int64); ok {
-		r1 = returnFunc(userID, filters, sorts, pagination)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) int64); ok {
+		r1 = returnFunc(ctx, userID, filters, sorts, pagination)
 	} else {
 		r1 = ret.Get(1).(int64)
 	}
-	if returnFunc, ok := ret.Get(2).(func(uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) error); ok {
-		r2 = returnFunc(userID, filters, sorts, pagination)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, uint, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) error); ok {
+		r2 = returnFunc(ctx, userID, filters, sorts, pagination)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -203,37 +358,43 @@ type MockAPIKeyService_GetAPIKeys_Call struct {
 }
 
 // GetAPIKeys is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - filters []queryutil.CrudFilter
 //   - sorts []queryutil.Sort
 //   - pagination queryutil.Pagination
-func (_e *MockAPIKeyService_Expecter) GetAPIKeys(userID interface{}, filters interface{}, sorts interface{}, pagination interface{}) *MockAPIKeyService_GetAPIKeys_Call {
-	return &MockAPIKeyService_GetAPIKeys_Call{Call: _e.mock.On("GetAPIKeys", userID, filters, sorts, pagination)}
+func (_e *MockAPIKeyService_Expecter) GetAPIKeys(ctx interface{}, userID interface{}, filters interface{}, sorts interface{}, pagination interface{}) *MockAPIKeyService_GetAPIKeys_Call {
+	return &MockAPIKeyService_GetAPIKeys_Call{Call: _e.mock.On("GetAPIKeys", ctx, userID, filters, sorts, pagination)}
 }
 
-func (_c *MockAPIKeyService_GetAPIKeys_Call) Run(run func(userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination)) *MockAPIKeyService_GetAPIKeys_Call {
+func (_c *MockAPIKeyService_GetAPIKeys_Call) Run(run func(ctx context.Context, userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination)) *MockAPIKeyService_GetAPIKeys_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 []queryutil.CrudFilter
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].([]queryutil.CrudFilter)
+			arg1 = args[1].(uint)
 		}
-		var arg2 []queryutil.Sort
+		var arg2 []queryutil.CrudFilter
 		if args[2] != nil {
-			arg2 = args[2].([]queryutil.Sort)
+			arg2 = args[2].([]queryutil.CrudFilter)
 		}
-		var arg3 queryutil.Pagination
+		var arg3 []queryutil.Sort
 		if args[3] != nil {
-			arg3 = args[3].(queryutil.Pagination)
+			arg3 = args[3].([]queryutil.Sort)
+		}
+		var arg4 queryutil.Pagination
+		if args[4] != nil {
+			arg4 = args[4].(queryutil.Pagination)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -244,7 +405,7 @@ func (_c *MockAPIKeyService_GetAPIKeys_Call) Return(aPIKeys []*models.APIKey, n 
 	return _c
 }
 
-func (_c *MockAPIKeyService_GetAPIKeys_Call) RunAndReturn(run func(userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.APIKey, int64, error)) *MockAPIKeyService_GetAPIKeys_Call {
+func (_c *MockAPIKeyService_GetAPIKeys_Call) RunAndReturn(run func(ctx context.Context, userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.APIKey, int64, error)) *MockAPIKeyService_GetAPIKeys_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -293,9 +454,215 @@ func (_c *MockAPIKeyService_ID_Call) RunAndReturn(run func() string) *MockAPIKey
 	return _c
 }
 
+// Logger provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) Logger() *core.Logger {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Logger")
+	}
+
+	var r0 *core.Logger
+	if returnFunc, ok := ret.Get(0).(func() *core.Logger); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*core.Logger)
+		}
+	}
+	return r0
+}
+
+// MockAPIKeyService_Logger_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Logger'
+type MockAPIKeyService_Logger_Call struct {
+	*mock.Call
+}
+
+// Logger is a helper method to define mock.On call
+func (_e *MockAPIKeyService_Expecter) Logger() *MockAPIKeyService_Logger_Call {
+	return &MockAPIKeyService_Logger_Call{Call: _e.mock.On("Logger")}
+}
+
+func (_c *MockAPIKeyService_Logger_Call) Run(run func()) *MockAPIKeyService_Logger_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_Logger_Call) Return(logger *core.Logger) *MockAPIKeyService_Logger_Call {
+	_c.Call.Return(logger)
+	return _c
+}
+
+func (_c *MockAPIKeyService_Logger_Call) RunAndReturn(run func() *core.Logger) *MockAPIKeyService_Logger_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetConfig provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) SetConfig(cfg config.Manager) {
+	_mock.Called(cfg)
+	return
+}
+
+// MockAPIKeyService_SetConfig_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetConfig'
+type MockAPIKeyService_SetConfig_Call struct {
+	*mock.Call
+}
+
+// SetConfig is a helper method to define mock.On call
+//   - cfg config.Manager
+func (_e *MockAPIKeyService_Expecter) SetConfig(cfg interface{}) *MockAPIKeyService_SetConfig_Call {
+	return &MockAPIKeyService_SetConfig_Call{Call: _e.mock.On("SetConfig", cfg)}
+}
+
+func (_c *MockAPIKeyService_SetConfig_Call) Run(run func(cfg config.Manager)) *MockAPIKeyService_SetConfig_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 config.Manager
+		if args[0] != nil {
+			arg0 = args[0].(config.Manager)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetConfig_Call) Return() *MockAPIKeyService_SetConfig_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetConfig_Call) RunAndReturn(run func(cfg config.Manager)) *MockAPIKeyService_SetConfig_Call {
+	_c.Run(run)
+	return _c
+}
+
+// SetContext provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) SetContext(ctx core.Context) {
+	_mock.Called(ctx)
+	return
+}
+
+// MockAPIKeyService_SetContext_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetContext'
+type MockAPIKeyService_SetContext_Call struct {
+	*mock.Call
+}
+
+// SetContext is a helper method to define mock.On call
+//   - ctx core.Context
+func (_e *MockAPIKeyService_Expecter) SetContext(ctx interface{}) *MockAPIKeyService_SetContext_Call {
+	return &MockAPIKeyService_SetContext_Call{Call: _e.mock.On("SetContext", ctx)}
+}
+
+func (_c *MockAPIKeyService_SetContext_Call) Run(run func(ctx core.Context)) *MockAPIKeyService_SetContext_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 core.Context
+		if args[0] != nil {
+			arg0 = args[0].(core.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetContext_Call) Return() *MockAPIKeyService_SetContext_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetContext_Call) RunAndReturn(run func(ctx core.Context)) *MockAPIKeyService_SetContext_Call {
+	_c.Run(run)
+	return _c
+}
+
+// SetDB provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) SetDB(db *gorm.DB) {
+	_mock.Called(db)
+	return
+}
+
+// MockAPIKeyService_SetDB_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetDB'
+type MockAPIKeyService_SetDB_Call struct {
+	*mock.Call
+}
+
+// SetDB is a helper method to define mock.On call
+//   - db *gorm.DB
+func (_e *MockAPIKeyService_Expecter) SetDB(db interface{}) *MockAPIKeyService_SetDB_Call {
+	return &MockAPIKeyService_SetDB_Call{Call: _e.mock.On("SetDB", db)}
+}
+
+func (_c *MockAPIKeyService_SetDB_Call) Run(run func(db *gorm.DB)) *MockAPIKeyService_SetDB_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *gorm.DB
+		if args[0] != nil {
+			arg0 = args[0].(*gorm.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetDB_Call) Return() *MockAPIKeyService_SetDB_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetDB_Call) RunAndReturn(run func(db *gorm.DB)) *MockAPIKeyService_SetDB_Call {
+	_c.Run(run)
+	return _c
+}
+
+// SetLogger provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) SetLogger(logger *core.Logger) {
+	_mock.Called(logger)
+	return
+}
+
+// MockAPIKeyService_SetLogger_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetLogger'
+type MockAPIKeyService_SetLogger_Call struct {
+	*mock.Call
+}
+
+// SetLogger is a helper method to define mock.On call
+//   - logger *core.Logger
+func (_e *MockAPIKeyService_Expecter) SetLogger(logger interface{}) *MockAPIKeyService_SetLogger_Call {
+	return &MockAPIKeyService_SetLogger_Call{Call: _e.mock.On("SetLogger", logger)}
+}
+
+func (_c *MockAPIKeyService_SetLogger_Call) Run(run func(logger *core.Logger)) *MockAPIKeyService_SetLogger_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *core.Logger
+		if args[0] != nil {
+			arg0 = args[0].(*core.Logger)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetLogger_Call) Return() *MockAPIKeyService_SetLogger_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockAPIKeyService_SetLogger_Call) RunAndReturn(run func(logger *core.Logger)) *MockAPIKeyService_SetLogger_Call {
+	_c.Run(run)
+	return _c
+}
+
 // ValidateAPIKey provides a mock function for the type MockAPIKeyService
-func (_mock *MockAPIKeyService) ValidateAPIKey(userID uint, keyUUID uuid.UUID) (*models.APIKey, error) {
-	ret := _mock.Called(userID, keyUUID)
+func (_mock *MockAPIKeyService) ValidateAPIKey(ctx context.Context, userID uint, keyUUID uuid.UUID) (*models.APIKey, error) {
+	ret := _mock.Called(ctx, userID, keyUUID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ValidateAPIKey")
@@ -303,18 +670,18 @@ func (_mock *MockAPIKeyService) ValidateAPIKey(userID uint, keyUUID uuid.UUID) (
 
 	var r0 *models.APIKey
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uuid.UUID) (*models.APIKey, error)); ok {
-		return returnFunc(userID, keyUUID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uuid.UUID) (*models.APIKey, error)); ok {
+		return returnFunc(ctx, userID, keyUUID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, uuid.UUID) *models.APIKey); ok {
-		r0 = returnFunc(userID, keyUUID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uuid.UUID) *models.APIKey); ok {
+		r0 = returnFunc(ctx, userID, keyUUID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*models.APIKey)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, uuid.UUID) error); ok {
-		r1 = returnFunc(userID, keyUUID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, userID, keyUUID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -327,25 +694,31 @@ type MockAPIKeyService_ValidateAPIKey_Call struct {
 }
 
 // ValidateAPIKey is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - keyUUID uuid.UUID
-func (_e *MockAPIKeyService_Expecter) ValidateAPIKey(userID interface{}, keyUUID interface{}) *MockAPIKeyService_ValidateAPIKey_Call {
-	return &MockAPIKeyService_ValidateAPIKey_Call{Call: _e.mock.On("ValidateAPIKey", userID, keyUUID)}
+func (_e *MockAPIKeyService_Expecter) ValidateAPIKey(ctx interface{}, userID interface{}, keyUUID interface{}) *MockAPIKeyService_ValidateAPIKey_Call {
+	return &MockAPIKeyService_ValidateAPIKey_Call{Call: _e.mock.On("ValidateAPIKey", ctx, userID, keyUUID)}
 }
 
-func (_c *MockAPIKeyService_ValidateAPIKey_Call) Run(run func(userID uint, keyUUID uuid.UUID)) *MockAPIKeyService_ValidateAPIKey_Call {
+func (_c *MockAPIKeyService_ValidateAPIKey_Call) Run(run func(ctx context.Context, userID uint, keyUUID uuid.UUID)) *MockAPIKeyService_ValidateAPIKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 uuid.UUID
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(uuid.UUID)
+			arg1 = args[1].(uint)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -356,7 +729,7 @@ func (_c *MockAPIKeyService_ValidateAPIKey_Call) Return(aPIKey *models.APIKey, e
 	return _c
 }
 
-func (_c *MockAPIKeyService_ValidateAPIKey_Call) RunAndReturn(run func(userID uint, keyUUID uuid.UUID) (*models.APIKey, error)) *MockAPIKeyService_ValidateAPIKey_Call {
+func (_c *MockAPIKeyService_ValidateAPIKey_Call) RunAndReturn(run func(ctx context.Context, userID uint, keyUUID uuid.UUID) (*models.APIKey, error)) *MockAPIKeyService_ValidateAPIKey_Call {
 	_c.Call.Return(run)
 	return _c
 }
