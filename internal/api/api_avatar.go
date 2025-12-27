@@ -117,7 +117,7 @@ func (a *API) uploadAvatar(c echo.Context) error {
 	}
 
 	// Store in S3
-	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
+	storage := core.GetService[core.StorageService](a.Context(), core.STORAGE_SERVICE)
 	err = storage.S3Upload(ctx.Request().Context(),
 		a.S3Bucket(),
 		path,
@@ -140,7 +140,7 @@ func (a *API) getAvatar(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
+	storage := core.GetService[core.StorageService](a.Context(), core.STORAGE_SERVICE)
 
 	reader, mimeType, err := a.getAvatarReader(storage, ctx.Request().Context(), userID)
 	if err == nil {
@@ -161,7 +161,7 @@ func (a *API) getAvatar(c echo.Context) error {
 }
 
 func (a *API) setAvatarURL(ctx httputil.RequestContext, userID uint, responseDto *dto.AccountInfoResponse) error {
-	storage := core.GetService[core.StorageService](a.ctx, core.STORAGE_SERVICE)
+	storage := core.GetService[core.StorageService](a.Context(), core.STORAGE_SERVICE)
 	path, err := a.getAvatarPath(userID)
 	if err != nil {
 		return err

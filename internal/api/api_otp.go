@@ -76,7 +76,7 @@ func (a *API) otpGenerate(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	otp, err := a.otp.OTPGenerate(user)
+	otp, err := a.otp.OTPGenerate(ctx.Request().Context(), user)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -107,7 +107,7 @@ func (a *API) otpVerify(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	err := a.otp.OTPEnable(user, requestDto.OTP)
+	err := a.otp.OTPEnable(ctx.Request().Context(), user, requestDto.OTP)
 	if err != nil {
 		if errors.Is(err, core.ErrInvalidOTPCode) {
 			acctErr := core.NewAccountError(core.ErrKeyInvalidOTPCode, nil)
@@ -142,7 +142,7 @@ func (a *API) otpValidate(c echo.Context) error {
 
 	// Retrieve the remember flag from cookies
 	remember := a.getRememberFlagFromCookie(ctx)
-	_jwt, err := a.auth.LoginOTP(user, request.OTP, remember)
+	_jwt, err := a.auth.LoginOTP(ctx.Request().Context(), user, request.OTP, remember)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -177,7 +177,7 @@ func (a *API) otpDisable(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	valid, _, err := a.auth.ValidLoginByUserID(user, request.Password)
+	valid, _, err := a.auth.ValidLoginByUserID(ctx.Request().Context(), user, request.Password)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -192,7 +192,7 @@ func (a *API) otpDisable(c echo.Context) error {
 		return ctx.Error(err, http.StatusUnauthorized)
 	}
 
-	err = a.otp.OTPDisable(user)
+	err = a.otp.OTPDisable(ctx.Request().Context(), user)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)

@@ -140,7 +140,7 @@ func (a *API) accountInfo(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	exists, acct, err := a.user.AccountExists(user)
+	exists, acct, err := a.user.AccountExists(ctx.Request().Context(), user)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -176,12 +176,12 @@ func (a *API) accountPermissions(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	perms, err := a.access.ExportUserPolicy(user)
+	perms, err := a.access.ExportUserPolicy(ctx.Request().Context(), user)
 	if err != nil {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	model := a.access.ExportModel()
+	model := a.access.ExportModel(ctx.Request().Context())
 
 	responseModel := dto.PermissionsModel{
 		Permissions: perms,
@@ -201,7 +201,7 @@ func (a *API) verifyEmail(c echo.Context) error {
 	}
 
 	// First check if account is already verified
-	exists, user, err := a.user.EmailExists(requestDto.Email)
+	exists, user, err := a.user.EmailExists(ctx.Request().Context(), requestDto.Email)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -214,7 +214,7 @@ func (a *API) verifyEmail(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	}
 
-	verified, err := a.user.IsAccountVerified(user.ID)
+	verified, err := a.user.IsAccountVerified(ctx.Request().Context(), user.ID)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -229,7 +229,7 @@ func (a *API) verifyEmail(c echo.Context) error {
 	}
 
 	// Only attempt verification if not already verified
-	err = a.user.VerifyEmail(requestDto.Email, requestDto.Token)
+	err = a.user.VerifyEmail(ctx.Request().Context(), requestDto.Email, requestDto.Token)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -253,7 +253,7 @@ func (a *API) verifyEmail(c echo.Context) error {
 		_, authErr := mcontext.GetAuthToken(ctx.Context)
 		if authErr != nil {
 			// User is not logged in, so we can proceed with auto-login
-			_jwt, loginErr := a.auth.LoginID(user.ID, ctx.RealIP(), remember)
+			_jwt, loginErr := a.auth.LoginID(ctx.Request().Context(), user.ID, ctx.RealIP(), remember)
 			if loginErr != nil {
 				acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, loginErr)
 				a.logger.Error("failed to auto-login after email verification", zap.Error(acctErr))
@@ -281,7 +281,7 @@ func (a *API) resendVerifyEmail(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	exists, _user, err := a.user.EmailExists(requestDto.Email)
+	exists, _user, err := a.user.EmailExists(ctx.Request().Context(), requestDto.Email)
 
 	if err != nil {
 		if core.IsAccountError(err) {
@@ -296,7 +296,7 @@ func (a *API) resendVerifyEmail(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	}
 
-	err = a.user.SendEmailVerification(_user.ID)
+	err = a.user.SendEmailVerification(ctx.Request().Context(), _user.ID)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -326,7 +326,7 @@ func (a *API) updateEmail(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	err := a.user.UpdateAccountEmail(user, requestDto.Email, requestDto.Password)
+	err := a.user.UpdateAccountEmail(ctx.Request().Context(), user, requestDto.Email, requestDto.Password)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -352,7 +352,7 @@ func (a *API) updatePassword(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	err := a.user.UpdateAccountPassword(user, requestDto.CurrentPassword, requestDto.NewPassword)
+	err := a.user.UpdateAccountPassword(ctx.Request().Context(), user, requestDto.CurrentPassword, requestDto.NewPassword)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -390,7 +390,7 @@ func (a *API) updateProfile(c echo.Context) error {
 	}
 
 	// Get existing user values if fields are empty
-	exists, existingUser, err := a.user.AccountExists(userID)
+	exists, existingUser, err := a.user.AccountExists(ctx.Request().Context(), userID)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -417,7 +417,7 @@ func (a *API) updateProfile(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	}
 
-	err = a.user.UpdateAccountName(userID, firstName, lastName)
+	err = a.user.UpdateAccountName(ctx.Request().Context(), userID, firstName, lastName)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -440,7 +440,7 @@ func (a *API) deleteAccount(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	err := a.user.RequestAccountDeletion(user, ctx.RealIP())
+	err := a.user.RequestAccountDeletion(ctx.Request().Context(), user, ctx.RealIP())
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -468,7 +468,7 @@ func (a *API) passwordResetRequest(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	exists, user, err := a.user.EmailExists(requestDto.Email)
+	exists, user, err := a.user.EmailExists(ctx.Request().Context(), requestDto.Email)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -482,7 +482,7 @@ func (a *API) passwordResetRequest(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	}
 
-	err = a.password.SendPasswordReset(user)
+	err = a.password.SendPasswordReset(ctx.Request().Context(), user)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -504,7 +504,7 @@ func (a *API) passwordResetConfirm(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	exists, _, err := a.user.EmailExists(requestDto.Email)
+	exists, _, err := a.user.EmailExists(ctx.Request().Context(), requestDto.Email)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -518,7 +518,7 @@ func (a *API) passwordResetConfirm(c echo.Context) error {
 		return ctx.Error(errors.New("invalid request"), http.StatusBadRequest)
 	}
 
-	err = a.password.ResetPassword(requestDto.Email, requestDto.Token, requestDto.Password)
+	err = a.password.ResetPassword(ctx.Request().Context(), requestDto.Email, requestDto.Token, requestDto.Password)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	_ "embed"
 	"errors"
@@ -52,8 +53,7 @@ const (
 var _ core.API = (*API)(nil)
 
 type API struct {
-	ctx         core.Context
-	config      config.Manager
+	*core.BaseComponent
 	user        core.UserService
 	auth        core.AuthService
 	password    core.PasswordResetService
@@ -67,13 +67,17 @@ type API struct {
 	ops         core.OperationFinder
 }
 
+func (a *API) ID() string {
+	return a.Name()
+}
+
 func (a *API) OpenAPIInfo() router.APIInfoDefinition {
 	// Implement the OpenAPIInfo method using the router.APIInfo builder
 	return router.APIInfo().
 		Title("Account API").Description("API endpoints for managing user accounts, authentication, and API keys.")
 }
 
-func (a *API) Config() config.APIConfig {
+func (a *API) GetConfig() config.APIConfig {
 	return &pluginConfig.APIConfig{}
 }
 
@@ -86,8 +90,6 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 
 	opts := core.ContextOptions(
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			api.ctx = ctx
-			api.config = ctx.Config()
 			api.user = ctx.Service(core.USER_SERVICE).(core.UserService)
 			api.auth = ctx.Service(core.AUTH_SERVICE).(core.AuthService)
 			api.password = ctx.Service(core.PASSWORD_RESET_SERVICE).(core.PasswordResetService)
@@ -103,8 +105,8 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			return nil
 		}),
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			event.OnBootCompleted(ctx, func(ctx core.Context) error {
-				return core.Fire(ctx, event.EVENT_USER_SERVICE_SUBDOMAIN_SET, event.NewUserServiceSubdomainSetEvent(api.Subdomain()))
+			event.OnBootCompleted(ctx, func(ctx core.Context, eventCtx context.Context) error {
+				return core.Fire(ctx, event.EVENT_USER_SERVICE_SUBDOMAIN_SET, event.NewUserServiceSubdomainSetEvent(api.Subdomain(), eventCtx))
 			})
 			return nil
 		}),
@@ -179,7 +181,7 @@ func (a *API) ping(c echo.Context) error {
 }
 
 func (a *API) cookieSetter() adapter.CookieSetter {
-	return adapter.NewMultiCookieSetter(adapter.NewFromCore(a.ctx), adapter.NewAPIProvider())
+	return adapter.NewMultiCookieSetter(adapter.NewFromCore(a.Context()), adapter.NewAPIProvider())
 }
 
 func (a *API) setAuthCookie(c echo.Context, token string) error {
@@ -223,7 +225,7 @@ func (a *API) setAuthCookieWithRemember(c echo.Context, token string, remember b
 
 	// If remember is true, don't let cookie TTL exceed token exp to avoid drift
 	if remember {
-		if rttl := time.Duration(a.config.Config().Core.Account.RememberMeTTL) * time.Second; rttl < ttl {
+		if rttl := time.Duration(a.Config().Config().Core.Account.RememberMeTTL) * time.Second; rttl < ttl {
 			ttl = rttl
 		}
 	}
@@ -244,7 +246,7 @@ func (a *API) rootAuthComplete(c echo.Context) error {
 		return nil
 	}
 
-	exists, user, err := a.user.AccountExists(userId)
+	exists, user, err := a.user.AccountExists(ctx.Request().Context(), userId)
 	if err != nil {
 		a.logger.Error("failed to check if email exists", zap.Error(err))
 		return ctx.Error(err, http.StatusInternalServerError)
@@ -289,7 +291,7 @@ func (a *API) logout(c echo.Context) error {
 func (a *API) uploadLimit(c echo.Context) error {
 	ctx := httputil.Context(c)
 	responseModel := &dto.UploadLimitResponse{
-		Limit: a.config.Config().Core.PostUploadLimit,
+		Limit: a.Config().Config().Core.PostUploadLimit,
 	}
 	var responseDto dto.UploadLimitResponse
 	return httputil.EncodeResponse[*dto.UploadLimitResponse](ctx, responseModel, &responseDto)
@@ -332,7 +334,7 @@ func (a *API) storeRememberFlagInCookie(c echo.Context, remember bool) {
 	}
 
 	// Set cookie for the configured TTL if remember is true, otherwise expire immediately
-	expiry := time.Now().Add(time.Duration(a.config.Config().Core.Account.RememberMeTTL) * time.Second)
+	expiry := time.Now().Add(time.Duration(a.Config().Config().Core.Account.RememberMeTTL) * time.Second)
 	if !remember {
 		expiry = time.Now().Add(-1 * time.Hour) // Expire immediately
 	}
@@ -341,7 +343,7 @@ func (a *API) storeRememberFlagInCookie(c echo.Context, remember bool) {
 		c.Response(),
 		RememberMeCookie,
 		rememberValue,
-		a.config.Config().Core.Domain,
+		a.Config().Config().Core.Domain,
 		"/",
 		expiry,
 		true,
@@ -356,11 +358,11 @@ func (a *API) clearRememberMeCookie(c echo.Context) {
 }
 
 func (a *API) Subdomain() string {
-	return core.GetAPIConfig[*pluginConfig.APIConfig](a.ctx, internal.PLUGIN_NAME).Subdomain
+	return core.GetAPIConfig[*pluginConfig.APIConfig](a.Context(), internal.PLUGIN_NAME).Subdomain
 }
 
 func (a *API) S3Bucket() string {
-	return a.config.Config().Core.Storage.S3.BufferBucket
+	return a.Config().Config().Core.Storage.S3.BufferBucket
 }
 
 func (a *API) AuthTokenName() string {
@@ -392,7 +394,7 @@ func accountErrorResponses(errors ...*core.Error) map[int]swagger.ContentValue {
 }
 
 func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
-	cfg := a.ctx.Config().Config().Core
+	cfg := a.Context().Config().Config().Core
 
 	// Determine effective port (prefer externalPort if set)
 	port := cfg.ExternalPort
@@ -445,12 +447,12 @@ func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
 }
 
 func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) error {
-	pluginCfg := a.config.GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
+	pluginCfg := a.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 
 	// Create middleware instances once
-	authMw := middleware.AuthMiddleware(a.ctx, middleware.WithAuthPurpose(jwt.PurposeLogin))
-	loginAuthMw2fa := middleware.AuthMiddleware(a.ctx, middleware.WithAuthPurpose(jwt.Purpose2FA))
-	accessMw := middleware.AccessMiddleware(a.ctx)
+	authMw := middleware.AuthMiddleware(a.Context(), middleware.WithAuthPurpose(jwt.PurposeLogin))
+	loginAuthMw2fa := middleware.AuthMiddleware(a.Context(), middleware.WithAuthPurpose(jwt.Purpose2FA))
+	accessMw := middleware.AccessMiddleware(a.Context())
 
 	// Build all routes
 	var routes []router.Route
@@ -516,7 +518,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		router.MustDefaultPublicFilesSetup(gRouter, pluginCfg.AppFolder)
 	} else {
 		// Using the new WebAppConfig helper with embedded assets
-		router.MustDefaultStaticSetup(gRouter, router.NewAppFilesystem(portal_dashboard.GetFS(), a.config.Config().Core.Domain))
+		router.MustDefaultStaticSetup(gRouter, router.NewAppFilesystem(portal_dashboard.GetFS(), a.Config().Config().Core.Domain))
 	}
 
 	return nil

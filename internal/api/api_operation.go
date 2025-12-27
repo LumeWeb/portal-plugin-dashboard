@@ -219,7 +219,7 @@ func (a *API) listOperations(c echo.Context) error {
 				err = item.FromModel(a.convertWorkflowInstanceToOperationListItem(instance, status))
 				if err != nil {
 					// If we can't convert the model, log the error and skip this item
-					a.ctx.Logger().Error("failed to convert operation item", zap.Error(err), zap.Uint("request_id", instance.Request.ID))
+					a.Logger().Error("failed to convert operation item", zap.Error(err), zap.Uint("request_id", instance.Request.ID))
 					continue
 				}
 				items = append(items, item)

@@ -97,7 +97,7 @@ func (a *API) buildAuthRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.Mi
 }
 
 func (a *API) buildRootAuthCompleteRoute() []router.Route {
-	authMw := middleware.AuthMiddleware(a.ctx, middleware.WithAuthPurpose(jwt.PurposeLogin))
+	authMw := middleware.AuthMiddleware(a.Context(), middleware.WithAuthPurpose(jwt.PurposeLogin))
 
 	return []router.Route{
 		router.NewRoute(http.MethodGet, "/api/auth/complete", a.rootAuthComplete,
@@ -121,7 +121,7 @@ func (a *API) login(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	exists, _, err := a.user.EmailExists(requestDto.Email)
+	exists, _, err := a.user.EmailExists(ctx.Request().Context(), requestDto.Email)
 	if err != nil {
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
 		a.logger.Error("failed to check if email exists", zap.Error(acctErr), zap.String("email", requestDto.Email))
@@ -133,7 +133,7 @@ func (a *API) login(c echo.Context) error {
 		return ctx.Error(err, http.StatusUnauthorized)
 	}
 
-	_jwt, user, err := a.auth.LoginPassword(requestDto.Email, requestDto.Password, ctx.RealIP(), requestDto.Remember)
+	_jwt, user, err := a.auth.LoginPassword(ctx.Request().Context(), requestDto.Email, requestDto.Password, ctx.RealIP(), requestDto.Remember)
 	if err != nil || user == nil {
 		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
 		a.logger.Error("failed to login", zap.Error(acctErr))
@@ -177,7 +177,7 @@ func (a *API) register(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	user, err := a.user.CreateAccount(requestDto.Email, requestDto.Password, true)
+	user, err := a.user.CreateAccount(ctx.Request().Context(), requestDto.Email, requestDto.Password, true)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -189,7 +189,7 @@ func (a *API) register(c echo.Context) error {
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
-	err = a.user.UpdateAccountName(user.ID, requestDto.FirstName, requestDto.LastName)
+	err = a.user.UpdateAccountName(ctx.Request().Context(), user.ID, requestDto.FirstName, requestDto.LastName)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
