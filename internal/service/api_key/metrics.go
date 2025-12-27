@@ -64,5 +64,5 @@ func init() {
 }
 
 func GetCollectors() []prometheus.Collector {
-	return []prometheus.Collector{CreatedTotal, DeletedTotal, Duration}
+	return []prometheus.Collector{CreatedTotal, DeletedTotal, Duration, Errors}
 }
