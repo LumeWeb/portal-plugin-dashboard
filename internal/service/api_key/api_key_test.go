@@ -1,6 +1,7 @@
 package api_key
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -18,19 +19,19 @@ import (
 
 func TestMain(m *testing.M) {
 	coreTesting.WithDBAndOptions(m,
-		coreTesting.WithService(API_KEY_SERVICE, NewAPIKeyService),
+		coreTesting.WithService(pluginCore.API_KEY_SERVICE, NewAPIKeyService),
 	)
 }
 
 func TestAPIKeyService_CreateAPIKey(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 		name := "My Test Key"
 
-		apiKey, err := apiKeyService.CreateAPIKey(userID, name)
+		apiKey, err := apiKeyService.CreateAPIKey(context.Background(), userID, name)
 		require.NoError(tb, err)
 		assert.NotNil(tb, apiKey)
 
@@ -52,19 +53,19 @@ func TestAPIKeyService_CreateAPIKey(t *testing.T) {
 
 func TestAPIKeyService_CreateAPIKey_DuplicateName(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 		name := "My Test Key"
 
 		// Create the first API key
-		apiKey1, err := apiKeyService.CreateAPIKey(userID, name)
+		apiKey1, err := apiKeyService.CreateAPIKey(context.Background(), userID, name)
 		require.NoError(tb, err)
 		assert.NotNil(tb, apiKey1)
 
 		// Create a second API key with the same name
-		apiKey2, err := apiKeyService.CreateAPIKey(userID, name)
+		apiKey2, err := apiKeyService.CreateAPIKey(context.Background(), userID, name)
 		require.NoError(tb, err)
 		assert.NotNil(tb, apiKey2)
 
@@ -87,20 +88,20 @@ func TestAPIKeyService_CreateAPIKey_DuplicateName(t *testing.T) {
 
 func TestAPIKeyService_GetAPIKeys(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
 		userID2 := uint(2)
 
 		// Create keys for user 1
-		key1, err := apiKeyService.CreateAPIKey(userID1, "Key 1 User 1")
+		key1, err := apiKeyService.CreateAPIKey(context.Background(), userID1, "Key 1 User 1")
 		require.NoError(tb, err)
-		key2, err := apiKeyService.CreateAPIKey(userID1, "Key 2 User 1")
+		key2, err := apiKeyService.CreateAPIKey(context.Background(), userID1, "Key 2 User 1")
 		require.NoError(tb, err)
 
 		// Create key for user 2
-		key3, err := apiKeyService.CreateAPIKey(userID2, "Key 1 User 2")
+		key3, err := apiKeyService.CreateAPIKey(context.Background(), userID2, "Key 1 User 2")
 		require.NoError(tb, err)
 
 		// Test fetching all keys for user 1
@@ -108,7 +109,7 @@ func TestAPIKeyService_GetAPIKeys(t *testing.T) {
 		sorts := []queryutil.Sort{}
 		pagination := queryutil.DefaultPagination
 
-		keys, total, err := apiKeyService.GetAPIKeys(userID1, filters, sorts, pagination)
+		keys, total, err := apiKeyService.GetAPIKeys(context.Background(), userID1, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(2), total)
 		assert.Len(tb, keys, 2)
@@ -129,7 +130,7 @@ func TestAPIKeyService_GetAPIKeys(t *testing.T) {
 		assert.True(tb, foundKey2)
 
 		// Test fetching keys for user 2
-		keys, total, err = apiKeyService.GetAPIKeys(userID2, filters, sorts, pagination)
+		keys, total, err = apiKeyService.GetAPIKeys(context.Background(), userID2, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(1), total)
 		assert.Len(tb, keys, 1)
@@ -137,7 +138,7 @@ func TestAPIKeyService_GetAPIKeys(t *testing.T) {
 		assert.Equal(tb, userID2, keys[0].UserID)
 
 		// Test fetching keys for a user with no keys
-		keys, total, err = apiKeyService.GetAPIKeys(uint(99), filters, sorts, pagination)
+		keys, total, err = apiKeyService.GetAPIKeys(context.Background(), uint(99), filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(0), total)
 		assert.Len(tb, keys, 0)
@@ -147,15 +148,15 @@ func TestAPIKeyService_GetAPIKeys(t *testing.T) {
 
 func TestAPIKeyService_GetAPIKeys_FilterByName(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Create keys
-		key1, err := apiKeyService.CreateAPIKey(userID, "Key 1")
+		key1, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key 1")
 		require.NoError(tb, err)
-		key2, err := apiKeyService.CreateAPIKey(userID, "Key 2")
+		key2, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key 2")
 		require.NoError(tb, err)
 
 		// Test with filter
@@ -164,7 +165,7 @@ func TestAPIKeyService_GetAPIKeys_FilterByName(t *testing.T) {
 		sorts := []queryutil.Sort{}
 		pagination := queryutil.DefaultPagination
 
-		keys, total, err := apiKeyService.GetAPIKeys(userID, filters, sorts, pagination)
+		keys, total, err := apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(1), total)
 		assert.Len(tb, keys, 1)
@@ -174,30 +175,30 @@ func TestAPIKeyService_GetAPIKeys_FilterByName(t *testing.T) {
 		nameFilter = queryutil.Equal("name", "NonExistentKey")
 		filters = []queryutil.CrudFilter{nameFilter}
 
-		keys, total, err = apiKeyService.GetAPIKeys(userID, filters, sorts, pagination)
+		keys, total, err = apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(0), total)
 		assert.Len(tb, keys, 0)
 
 		// Clean up
-		err = apiKeyService.DeleteAPIKey(userID, key1.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key1.UUID.ToUUID())
 		require.NoError(tb, err)
-		err = apiKeyService.DeleteAPIKey(userID, key2.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key2.UUID.ToUUID())
 		require.NoError(tb, err)
 	})
 }
 
 func TestAPIKeyService_GetAPIKeys_SortByNameAscending(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Create keys
-		key1, err := apiKeyService.CreateAPIKey(userID, "Key B")
+		key1, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key B")
 		require.NoError(tb, err)
-		key2, err := apiKeyService.CreateAPIKey(userID, "Key A")
+		key2, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key A")
 		require.NoError(tb, err)
 
 		// Test with sort
@@ -205,7 +206,7 @@ func TestAPIKeyService_GetAPIKeys_SortByNameAscending(t *testing.T) {
 		filters := []queryutil.CrudFilter{}
 		pagination := queryutil.DefaultPagination
 
-		keys, total, err := apiKeyService.GetAPIKeys(userID, filters, sorts, pagination)
+		keys, total, err := apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(2), total)
 		assert.Len(tb, keys, 2)
@@ -213,24 +214,24 @@ func TestAPIKeyService_GetAPIKeys_SortByNameAscending(t *testing.T) {
 		assert.Equal(tb, key1.UUID, keys[1].UUID) // Key B should come second
 
 		// Clean up
-		err = apiKeyService.DeleteAPIKey(userID, key1.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key1.UUID.ToUUID())
 		require.NoError(tb, err)
-		err = apiKeyService.DeleteAPIKey(userID, key2.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key2.UUID.ToUUID())
 		require.NoError(tb, err)
 	})
 }
 
 func TestAPIKeyService_GetAPIKeys_SortByNameDescending(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Create keys
-		key1, err := apiKeyService.CreateAPIKey(userID, "Key B")
+		key1, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key B")
 		require.NoError(tb, err)
-		key2, err := apiKeyService.CreateAPIKey(userID, "Key A")
+		key2, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key A")
 		require.NoError(tb, err)
 
 		// Test with sort
@@ -238,7 +239,7 @@ func TestAPIKeyService_GetAPIKeys_SortByNameDescending(t *testing.T) {
 		filters := []queryutil.CrudFilter{}
 		pagination := queryutil.DefaultPagination
 
-		keys, total, err := apiKeyService.GetAPIKeys(userID, filters, sorts, pagination)
+		keys, total, err := apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(2), total)
 		assert.Len(tb, keys, 2)
@@ -246,26 +247,26 @@ func TestAPIKeyService_GetAPIKeys_SortByNameDescending(t *testing.T) {
 		assert.Equal(tb, key2.UUID, keys[1].UUID) // Key A should come second
 
 		// Clean up
-		err = apiKeyService.DeleteAPIKey(userID, key1.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key1.UUID.ToUUID())
 		require.NoError(tb, err)
-		err = apiKeyService.DeleteAPIKey(userID, key2.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key2.UUID.ToUUID())
 		require.NoError(tb, err)
 	})
 }
 
 func TestAPIKeyService_GetAPIKeys_Pagination(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Create keys
-		key1, err := apiKeyService.CreateAPIKey(userID, "Key 1")
+		key1, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key 1")
 		require.NoError(tb, err)
-		key2, err := apiKeyService.CreateAPIKey(userID, "Key 2")
+		key2, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key 2")
 		require.NoError(tb, err)
-		key3, err := apiKeyService.CreateAPIKey(userID, "Key 3")
+		key3, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key 3")
 		require.NoError(tb, err)
 
 		// Test with pagination
@@ -274,7 +275,7 @@ func TestAPIKeyService_GetAPIKeys_Pagination(t *testing.T) {
 
 		// Page 1, Limit 2
 		pagination, _ := queryutil.CreatePage(1, 2)
-		keys, total, err := apiKeyService.GetAPIKeys(userID, filters, sorts, pagination)
+		keys, total, err := apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(3), total)
 		assert.Len(tb, keys, 2)
@@ -283,7 +284,7 @@ func TestAPIKeyService_GetAPIKeys_Pagination(t *testing.T) {
 
 		// Page 2, Limit 2
 		pagination, _ = queryutil.CreatePage(2, 2)
-		keys, total, err = apiKeyService.GetAPIKeys(userID, filters, sorts, pagination)
+		keys, total, err = apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(3), total)
 		assert.Len(tb, keys, 1)
@@ -291,36 +292,36 @@ func TestAPIKeyService_GetAPIKeys_Pagination(t *testing.T) {
 
 		// Page 3, Limit 2 (empty)
 		pagination, _ = queryutil.CreatePage(3, 2)
-		keys, total, err = apiKeyService.GetAPIKeys(userID, filters, sorts, pagination)
+		keys, total, err = apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
 		require.NoError(tb, err)
 		assert.Equal(tb, int64(3), total)
 		assert.Len(tb, keys, 0)
 
 		// Clean up
-		err = apiKeyService.DeleteAPIKey(userID, key1.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key1.UUID.ToUUID())
 		require.NoError(tb, err)
-		err = apiKeyService.DeleteAPIKey(userID, key2.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key2.UUID.ToUUID())
 		require.NoError(tb, err)
-		err = apiKeyService.DeleteAPIKey(userID, key3.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key3.UUID.ToUUID())
 		require.NoError(tb, err)
 	})
 }
 
 func TestAPIKeyService_DeleteAPIKey(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
 		userID2 := uint(2)
 
 		// Create a key for user 1
-		key1, err := apiKeyService.CreateAPIKey(userID1, "Key to Delete")
+		key1, err := apiKeyService.CreateAPIKey(context.Background(), userID1, "Key to Delete")
 		require.NoError(tb, err)
 		require.NotNil(tb, key1)
 
 		// Create a key for user 2 (should not be deleted)
-		key2, err := apiKeyService.CreateAPIKey(userID2, "Other User's Key")
+		key2, err := apiKeyService.CreateAPIKey(context.Background(), userID2, "Other User's Key")
 		require.NoError(tb, err)
 		require.NotNil(tb, key2)
 
@@ -331,7 +332,7 @@ func TestAPIKeyService_DeleteAPIKey(t *testing.T) {
 		assert.Equal(tb, key1.UUID, fetchedKey.UUID)
 
 		// Test successful deletion by owner
-		err = apiKeyService.DeleteAPIKey(userID1, key1.UUID.ToUUID())
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID1, key1.UUID.ToUUID())
 		require.NoError(tb, err)
 
 		// Verify key1 is deleted
@@ -349,14 +350,14 @@ func TestAPIKeyService_DeleteAPIKey(t *testing.T) {
 
 func TestAPIKeyService_DeleteAPIKey_NonExistent(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Test deleting a non-existent key
 		nonExistentUUID := uuid.New()
-		err := apiKeyService.DeleteAPIKey(userID, nonExistentUUID)
+		err := apiKeyService.DeleteAPIKey(context.Background(), userID, nonExistentUUID)
 		assert.ErrorIs(tb, err, gorm.ErrRecordNotFound) // Should return record not found error
 	},
 	)
@@ -364,20 +365,20 @@ func TestAPIKeyService_DeleteAPIKey_NonExistent(t *testing.T) {
 
 func TestAPIKeyService_DeleteAPIKey_WrongUser(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
 		userID2 := uint(2)
 
 		// Create a key for user 2
-		key2, err := apiKeyService.CreateAPIKey(userID2, "Other User's Key")
+		key2, err := apiKeyService.CreateAPIKey(context.Background(), userID2, "Other User's Key")
 		require.NoError(tb, err)
 		require.NotNil(tb, key2)
 
 		// Test deleting a key owned by another user
-		err = apiKeyService.DeleteAPIKey(userID1, key2.UUID.ToUUID()) // Try deleting key2 with userID1
-		assert.ErrorIs(tb, err, gorm.ErrRecordNotFound)               // Should return record not found error
+		err = apiKeyService.DeleteAPIKey(context.Background(), userID1, key2.UUID.ToUUID()) // Try deleting key2 with userID1
+		assert.ErrorIs(tb, err, gorm.ErrRecordNotFound)                                     // Should return record not found error
 
 		// Verify key2 is still not deleted
 		var fetchedKey3 pluginDb.APIKey
@@ -389,18 +390,18 @@ func TestAPIKeyService_DeleteAPIKey_WrongUser(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Create a key
-		key, err := apiKeyService.CreateAPIKey(userID, "Key to Validate")
+		key, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Key to Validate")
 		require.NoError(tb, err)
 		require.NotNil(tb, key)
 
 		// Test successful validation
-		validatedKey, err := apiKeyService.ValidateAPIKey(userID, key.UUID.ToUUID())
+		validatedKey, err := apiKeyService.ValidateAPIKey(context.Background(), userID, key.UUID.ToUUID())
 		require.NoError(tb, err)
 		assert.NotNil(tb, validatedKey)
 		assert.Equal(tb, key.ID, validatedKey.ID)
@@ -413,14 +414,14 @@ func TestAPIKeyService_ValidateAPIKey(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey_NonExistent(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Test validation of an invalid key
 		invalidKeyUUID := uuid.New()
-		validatedKey, err := apiKeyService.ValidateAPIKey(userID, invalidKeyUUID)
+		validatedKey, err := apiKeyService.ValidateAPIKey(context.Background(), userID, invalidKeyUUID)
 		require.Error(tb, err)
 		require.EqualError(tb, err, "invalid api key") // Check exact error message
 		assert.Nil(tb, validatedKey)
@@ -429,19 +430,19 @@ func TestAPIKeyService_ValidateAPIKey_NonExistent(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey_WrongUser(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID1 := uint(1)
 		userID2 := uint(2)
 
 		// Create a key for user 2
-		key, err := apiKeyService.CreateAPIKey(userID2, "Key for User 2")
+		key, err := apiKeyService.CreateAPIKey(context.Background(), userID2, "Key for User 2")
 		require.NoError(tb, err)
 		require.NotNil(tb, key)
 
 		// Test validation of a key belonging to a different user
-		validatedKey, err := apiKeyService.ValidateAPIKey(userID1, key.UUID.ToUUID())
+		validatedKey, err := apiKeyService.ValidateAPIKey(context.Background(), userID1, key.UUID.ToUUID())
 		require.Error(tb, err)
 		require.EqualError(tb, err, "invalid api key") // Check exact error message
 		assert.Nil(tb, validatedKey)
@@ -450,13 +451,13 @@ func TestAPIKeyService_ValidateAPIKey_WrongUser(t *testing.T) {
 
 func TestAPIKeyService_ValidateAPIKey_Expired(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, API_KEY_SERVICE)
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		require.NotNil(tb, apiKeyService)
 
 		userID := uint(1)
 
 		// Create a key that has already expired
-		key, err := apiKeyService.CreateAPIKey(userID, "Expired Key")
+		key, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Expired Key")
 		require.NoError(tb, err)
 		require.NotNil(tb, key)
 
@@ -466,7 +467,7 @@ func TestAPIKeyService_ValidateAPIKey_Expired(t *testing.T) {
 		ctx.DB().Save(key)
 
 		// Test validation of an expired key
-		validatedKey, err := apiKeyService.ValidateAPIKey(userID, key.UUID.ToUUID())
+		validatedKey, err := apiKeyService.ValidateAPIKey(context.Background(), userID, key.UUID.ToUUID())
 		require.Error(tb, err)
 		require.EqualError(tb, err, "invalid api key") // Check exact error message
 		assert.Nil(tb, validatedKey)

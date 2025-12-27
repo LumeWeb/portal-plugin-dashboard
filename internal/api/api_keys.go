@@ -76,12 +76,12 @@ func (a *API) createAPIKey(c echo.Context) error {
 	}
 
 	// Get config provider from core context
-	configProvider := adapter.NewFromCore(a.ctx)
+	configProvider := adapter.NewFromCore(a.Context())
 	privateKey := configProvider.GetPrivateKey()
 	domain := configProvider.GetDomain()
 
 	// Create API key record
-	apiKey, err := a.apiKey.CreateAPIKey(user, requestDto.Name)
+	apiKey, err := a.apiKey.CreateAPIKey(ctx.Request().Context(), user, requestDto.Name)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -127,7 +127,7 @@ func (a *API) getAPIKeys(c echo.Context) error {
 		c.Request(),
 		"api_keys",
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.APIKey, int64, error) {
-			return a.apiKey.GetAPIKeys(user, filters, sorts, pagination)
+			return a.apiKey.GetAPIKeys(ctx.Request().Context(), user, filters, sorts, pagination)
 		},
 		func(key *pluginDb.APIKey) dto.APIKeyResponse {
 			var resp dto.APIKeyResponse
@@ -149,7 +149,7 @@ func (a *API) deleteAPIKey(c echo.Context) error {
 		return ctx.Error(fmt.Errorf("invalid key ID"), http.StatusBadRequest)
 	}
 
-	err = a.apiKey.DeleteAPIKey(user, keyID)
+	err = a.apiKey.DeleteAPIKey(ctx.Request().Context(), user, keyID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ctx.Error(err, http.StatusNotFound)
@@ -196,7 +196,7 @@ func (a *API) authWithAPIKey(c echo.Context) error {
 	}
 
 	// Validate the API key using the parsed user ID and key ID
-	validatedKey, err := a.apiKey.ValidateAPIKey(uint(userID), keyID)
+	validatedKey, err := a.apiKey.ValidateAPIKey(ctx.Request().Context(), uint(userID), keyID)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -206,7 +206,7 @@ func (a *API) authWithAPIKey(c echo.Context) error {
 	}
 
 	// Login with the validated user ID
-	_jwt, err := a.auth.LoginID(validatedKey.UserID, ctx.RealIP(), false)
+	_jwt, err := a.auth.LoginID(ctx.Request().Context(), validatedKey.UserID, ctx.RealIP(), false)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)

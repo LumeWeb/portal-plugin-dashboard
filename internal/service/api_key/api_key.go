@@ -1,6 +1,7 @@
 package api_key
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -22,11 +23,9 @@ var (
 )
 
 type APIKeyServiceDefault struct {
-	ctx    core.Context
-	db     *gorm.DB
-	logger *core.Logger
-	user   core.UserService
-	auth   core.AuthService
+	*core.BaseComponent
+	user core.UserService
+	auth core.AuthService
 }
 
 func NewAPIKeyService() (core.Service, []core.ContextBuilderOption, error) {
@@ -34,13 +33,10 @@ func NewAPIKeyService() (core.Service, []core.ContextBuilderOption, error) {
 
 	return svc, core.ContextOptions(
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			svc.ctx = ctx
-			svc.db = ctx.DB()
-			svc.logger = ctx.ServiceLogger(svc)
 			svc.user = core.GetService[core.UserService](ctx, core.USER_SERVICE)
 			svc.auth = core.GetService[core.AuthService](ctx, core.AUTH_SERVICE)
 
-			return svc.db.AutoMigrate(&pluginDb.APIKey{})
+			return nil
 		}),
 	), nil
 }
@@ -49,89 +45,131 @@ func (s *APIKeyServiceDefault) ID() string {
 	return pluginCore.API_KEY_SERVICE
 }
 
-func (s *APIKeyServiceDefault) CreateAPIKey(userID uint, name string) (*pluginDb.APIKey, error) {
-	apiKey := &pluginDb.APIKey{
-		Name:   name,
-		UserID: userID,
-	}
+func (s *APIKeyServiceDefault) CreateAPIKey(ctx context.Context, userID uint, name string) (*pluginDb.APIKey, error) {
+	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.CreateAPIKey")
+	defer span.End()
 
-	err := db.RetryableTransaction(s.ctx, s.db, func(tx *gorm.DB) *gorm.DB {
-		return tx.Create(apiKey)
-	})
+	return core.MetricTrackResult(
+		Duration.WithLabelValues(LabelOpCreate),
+		nil,
+		func() (*pluginDb.APIKey, error) {
+			apiKey := &pluginDb.APIKey{
+				Name:   name,
+				UserID: userID,
+			}
 
-	if err != nil {
-		s.logger.Error("failed to create API key", zap.Error(err))
-		return nil, fmt.Errorf("failed to create API key: %w", err)
-	}
+			err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+				return tx.Create(apiKey)
+			})
 
-	return apiKey, nil
+			if err != nil {
+				s.Logger().Error("failed to create API key", zap.Error(err))
+				return nil, fmt.Errorf("failed to create API key: %w", err)
+			}
+
+			CreatedTotal.WithLabelValues().Inc()
+			return apiKey, nil
+		},
+	)
 }
 
-func (s *APIKeyServiceDefault) GetAPIKeys(userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.APIKey, int64, error) {
+func (s *APIKeyServiceDefault) GetAPIKeys(ctx context.Context, userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.APIKey, int64, error) {
+	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.GetAPIKeys")
+	defer span.End()
+
 	var apiKeys []*pluginDb.APIKey
 	var total int64
 
-	query := s.db.Model(&pluginDb.APIKey{}).Where(&pluginDb.APIKey{UserID: userID})
+	query := s.DB().Model(&pluginDb.APIKey{}).Where(&pluginDb.APIKey{UserID: userID})
 
 	// Apply filters, sorts and pagination using queryutil helpers
 	query = queryutil.ApplyFilters(query, filters, nil)
 	query = queryutil.ApplySort(query, sorts)
 
 	if err := query.Count(&total).Error; err != nil {
-		s.logger.Error("failed to count API keys", zap.Error(err))
+		s.Logger().Error("failed to count API keys", zap.Error(err))
 		return nil, 0, fmt.Errorf("failed to count API keys: %w", err)
 	}
 
 	query = queryutil.ApplyPagination(query, pagination)
 
 	if err := query.Find(&apiKeys).Error; err != nil {
-		s.logger.Error("failed to fetch API keys", zap.Error(err))
+		s.Logger().Error("failed to fetch API keys", zap.Error(err))
 		return nil, 0, fmt.Errorf("failed to fetch API keys: %w", err)
 	}
 
 	return apiKeys, total, nil
 }
 
-func (s *APIKeyServiceDefault) DeleteAPIKey(userID uint, keyID uuid.UUID) error {
-	item := &pluginDb.APIKey{
-		UserID: userID,
-		UUID:   types.FromUUID(keyID),
-	}
+func (s *APIKeyServiceDefault) DeleteAPIKey(ctx context.Context, userID uint, keyID uuid.UUID) error {
+	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.DeleteAPIKey")
+	defer span.End()
 
-	err := db.RetryableTransaction(s.ctx, s.db, func(tx *gorm.DB) *gorm.DB {
-		result := tx.Where(item).Delete(item)
-		if result.Error != nil {
-			return tx
-		}
-		if result.RowsAffected == 0 {
-			_ = tx.AddError(gorm.ErrRecordNotFound)
-			return tx
-		}
-		return tx
-	})
+	return core.MetricTrack(
+		Duration.WithLabelValues(LabelOpDelete),
+		Errors.WithLabelValues(LabelOpDelete),
+		func() error {
+			item := &pluginDb.APIKey{
+				UserID: userID,
+				UUID:   types.FromUUID(keyID),
+			}
 
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return gorm.ErrRecordNotFound
-		}
-		s.logger.Error("failed to delete API key", zap.Error(err))
-		return fmt.Errorf("failed to delete API key: %w", err)
-	}
+			err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+				result := tx.Where(item).Delete(item)
+				if result.Error != nil {
+					return tx
+				}
+				if result.RowsAffected == 0 {
+					_ = tx.AddError(gorm.ErrRecordNotFound)
+					return tx
+				}
+				return tx
+			})
 
-	return nil
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return gorm.ErrRecordNotFound
+				}
+				s.Logger().Error("failed to delete API key", zap.Error(err))
+				return fmt.Errorf("failed to delete API key: %w", err)
+			}
+
+			DeletedTotal.WithLabelValues().Inc()
+			return nil
+		},
+	)
 }
 
-func (s *APIKeyServiceDefault) ValidateAPIKey(userID uint, keyUUID uuid.UUID) (*pluginDb.APIKey, error) {
-	var apiKey pluginDb.APIKey
+func (s *APIKeyServiceDefault) ValidateAPIKey(ctx context.Context, userID uint, keyUUID uuid.UUID) (*pluginDb.APIKey, error) {
+	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.ValidateAPIKey")
+	defer span.End()
 
-	if err := s.db.Where(&pluginDb.APIKey{UUID: types.FromUUID(keyUUID), UserID: userID}).First(&apiKey).Error; err != nil {
-		return nil, fmt.Errorf("invalid api key")
-	}
+	return core.MetricTrackResult(
+		Duration.WithLabelValues(LabelOpValidate),
+		Errors.WithLabelValues(LabelOpValidate),
+		func() (*pluginDb.APIKey, error) {
+			var apiKey pluginDb.APIKey
 
-	// Check if key has expired
-	if apiKey.Expires != nil && apiKey.Expires.Before(time.Now()) {
-		return nil, fmt.Errorf("invalid api key")
-	}
+			err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+				result := tx.Where(&pluginDb.APIKey{UUID: types.FromUUID(keyUUID), UserID: userID}).First(&apiKey)
+				if result.Error != nil {
+					return tx
+				}
 
-	return &apiKey, nil
+				// Check if key has expired (this is application logic, not DB operation)
+				if apiKey.Expires != nil && apiKey.Expires.Before(time.Now()) {
+					_ = tx.AddError(fmt.Errorf("invalid api key"))
+					return tx
+				}
+
+				return tx
+			})
+
+			if err != nil {
+				return nil, fmt.Errorf("invalid api key")
+			}
+
+			return &apiKey, nil
+		},
+	)
 }

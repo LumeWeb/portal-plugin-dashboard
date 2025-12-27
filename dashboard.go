@@ -62,6 +62,7 @@ func GetPluginInfo() core.PluginInfo {
 					Factory: func() (core.Service, []core.ContextBuilderOption, error) {
 						return apiKeyService.NewAPIKeyService()
 					},
+					Metrics: apiKeyService.GetCollectors(),
 					Depends: []string{core.USER_SERVICE, core.AUTH_SERVICE},
 				},
 			}, nil

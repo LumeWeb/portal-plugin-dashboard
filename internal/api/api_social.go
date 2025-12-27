@@ -109,7 +109,7 @@ func (a *API) socialAuthLogout(c echo.Context) error {
 }
 
 func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestContext, returnUrl string) {
-	exists, m, err := a.user.EmailExists(guser.Email)
+	exists, m, err := a.user.EmailExists(ctx.Request().Context(), guser.Email)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -127,7 +127,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 			return
 		}
 
-		user, err := a.user.CreateAccount(guser.Email, pw, false)
+		user, err := a.user.CreateAccount(ctx.Request().Context(), guser.Email, pw, false)
 		if err != nil {
 			if core.IsAccountError(err) {
 				acctErr := core.AsAccountError(err)
@@ -139,7 +139,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 		}
 
 		// Use names from the social profile
-		err = a.user.UpdateAccountName(user.ID, guser.FirstName, guser.LastName)
+		err = a.user.UpdateAccountName(ctx.Request().Context(), user.ID, guser.FirstName, guser.LastName)
 		if err != nil {
 			if core.IsAccountError(err) {
 				acctErr := core.AsAccountError(err)
@@ -154,7 +154,7 @@ func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestConte
 		m = user
 	}
 
-	_jwt, err := a.auth.LoginID(m.ID, ctx.RealIP(), false)
+	_jwt, err := a.auth.LoginID(ctx.Request().Context(), m.ID, ctx.RealIP(), false)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -176,16 +176,16 @@ func (a *API) isValidReturnURL(returnUrl string) bool {
 	if returnUrl == "" {
 		return false
 	}
-	
+
 	// Must start with "/" but not "//" to be a relative path
 	if !strings.HasPrefix(returnUrl, "/") || strings.HasPrefix(returnUrl, "//") {
 		return false
 	}
-	
+
 	// Must not be an absolute URL
 	if strings.Contains(returnUrl, "://") {
 		return false
 	}
-	
+
 	return true
 }
