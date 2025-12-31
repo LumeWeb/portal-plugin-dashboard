@@ -482,8 +482,6 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 			router.WithDescription("Retrieves the maximum allowed upload size."),
 			router.WithResponseHeaders(http.StatusOK, "Upload limit", map[string]swagger.Schema{"application/json": {Value: dto.UploadLimitResponse{}}}, nil),
 		),
-		router.WithAccess(core.ACCESS_USER_ROLE),
-		router.WithMiddlewares(authMw, accessMw),
 	))
 
 	if err := router.RegisterRoutes(gRouter, accessSvc, a.Subdomain(), routes, router.WithCors()); err != nil {
