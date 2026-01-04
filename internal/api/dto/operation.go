@@ -20,6 +20,13 @@ type OperationRequest struct {
 	ID uint64 `param:"id" zog:"required"`
 }
 
+type OperationFilterRequest struct {
+	ID              uint64  `json:"id" filter:"true"`
+	Operation       string  `json:"operation" filter:"true"`
+	ProgressPercent float64 `json:"progress_percent" filter:"true"`
+	CID             string  `json:"cid" filter:"true"`
+}
+
 func (r *OperationRequest) Schema() *z.StructSchema {
 	return z.Struct(z.Shape{
 		"ID": z.UintLike[uint64]().Required(),
@@ -223,4 +230,17 @@ type OperationEventPayload struct {
 	CID                   *string                   `json:"cid,omitempty"`
 	TotalSteps            *int64                    `json:"total_steps,omitempty"`
 	CurrentStep           *int64                    `json:"current_step,omitempty"`
+}
+
+// OperationListItemResponse is a swagger-only DTO that represents the paginated response for operations.
+// It merges the generic queryutil.Response[*dto.OperationListItem] for OpenAPI documentation.
+//
+// This struct exists due to a TODO bug where queryutil.Response generics are not getting detected
+// properly as an array type in the swagger documentation generation. By providing a concrete struct,
+// we ensure the swagger docs correctly show the data field as an array of OperationListItem items.
+//
+// Note: This struct is only used for swagger documentation, not for actual encoding.
+type OperationListItemResponse struct {
+	Data  []OperationListItem `json:"data"`
+	Total int64               `json:"total"`
 }

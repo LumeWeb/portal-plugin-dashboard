@@ -817,6 +817,8 @@ go.lumeweb.com/portal-middleware v0.3.4 h1:A9/Ipo3giX449CCgbKGco97IqDxFG7Z1ppmM1
 go.lumeweb.com/portal-middleware v0.3.4/go.mod h1:3dHvOYXApc1b673I1UAoYBpyXg2c7ku4HqxXvef8dj8=
 go.lumeweb.com/portal-router v0.6.9 h1:jJsYdb1aUrroEjQ+CtJ9j6k3Jn7BmOAgPhpm1UkSAAM=
 go.lumeweb.com/portal-router v0.6.9/go.mod h1:4tb+XYa0GYiFVraMoossGgMBTN9z4U54v8SL+EOBvbs=
+go.lumeweb.com/portal-router v0.6.10 h1:JIiiahazddFsKyuwidymaka/9uWW3NaaMAT5xzSYo3U=
+go.lumeweb.com/portal-router v0.6.10/go.mod h1:4tb+XYa0GYiFVraMoossGgMBTN9z4U54v8SL+EOBvbs=
 go.lumeweb.com/queryutil v0.3.15 h1:R2l6GAAne8rCgh1rGy5HQ54zvs8JJw3gRLjhmkd8SHk=
 go.lumeweb.com/queryutil v0.3.15/go.mod h1:nLkIuXzugX8Ln24wsAbfTafvNmaTHLJhIUKWC1693G4=
 go.lumeweb.com/web/go/portal-dashboard v0.0.0-20251007105956-9515ed1f2355 h1:eQQaAwefoLF36w2Su31bXJS9GVMEnZ+NKqtiz2MaEeU=
