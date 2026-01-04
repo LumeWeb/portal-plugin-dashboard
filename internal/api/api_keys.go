@@ -40,11 +40,10 @@ func (a *API) buildAPIKeyRoutes(authMw echo.MiddlewareFunc, accessMw echo.Middle
 				router.WithSummary("List API Keys"),
 				router.WithDescription("Retrieves a list of API keys for the authenticated user."),
 				router.WithPaginationParams(),
-				router.WithResponseHeaders(http.StatusOK, "List of API Keys", map[string]swagger.Schema{
-					"application/json": {
-						Value: queryutil.Response[*dto.APIKeyResponse]{},
-					},
-				}, nil),
+				router.WithSuccessResponse(http.StatusOK, "List of API Keys",
+					router.WithJSONContent(dto.APIKeyListResponse{}),
+					router.WithTotalCountHeader(),
+				),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),

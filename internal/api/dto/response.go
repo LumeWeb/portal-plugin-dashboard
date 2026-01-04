@@ -101,6 +101,19 @@ type APIKeyResponse struct {
 	CreatedAt time.Time        `json:"created_at"`
 }
 
+// APIKeyListResponse is a swagger-only DTO that represents the paginated response for API keys.
+// It merges the generic queryutil.Response[*dto.APIKeyResponse] for OpenAPI documentation.
+//
+// This struct exists due to a TODO bug where queryutil.Response generics are not getting detected
+// properly as an array type in the swagger documentation generation. By providing a concrete struct,
+// we ensure the swagger docs correctly show the data field as an array of APIKeyResponse items.
+//
+// Note: This struct is only used for swagger documentation, not for actual encoding.
+type APIKeyListResponse struct {
+	Data  []APIKeyResponse `json:"data"`
+	Total int64            `json:"total"`
+}
+
 func (r *APIKeyResponse) FromModel(key *pluginDb.APIKey) error {
 	r.UUID = key.UUID
 	r.Name = key.Name

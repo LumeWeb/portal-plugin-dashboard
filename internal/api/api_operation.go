@@ -138,7 +138,8 @@ func (a *API) convertWorkflowInstanceToOperationDetailResponse(instance *core.Wo
 
 func (a *API) buildOperationRoutes(authMw echo.MiddlewareFunc, accessMw echo.MiddlewareFunc) []router.Route {
 	schemaProvider := queryutil.NewSchemaProvider()
-	operationSchema := schemaProvider.ForType(dto.OperationListItem{})
+	operationSchema := schemaProvider.ForType(dto.OperationFilterRequest{})
+	operationListSchema := schemaProvider.ForType(dto.OperationListItem{})
 
 	return []router.Route{
 		router.NewRoute(http.MethodGet, "/api/operations", a.listOperations,
@@ -147,11 +148,10 @@ func (a *API) buildOperationRoutes(authMw echo.MiddlewareFunc, accessMw echo.Mid
 				router.WithDescription("Retrieve a list of operations, with filtering, searching, and pagination support."),
 				router.WithQueryParam("search", "Search term for filename or other relevant operation data", ""),
 				router.WithPaginationParams(),
-				router.WithSortParams(operationSchema.SortableFields()),
-				//  TODO: Fix panic on processing schemas with pointers?
-				//	router.WithFilterParamsFromSchema(operationSchema),
+				router.WithSortParams(operationListSchema.SortableFields()),
+				router.WithFilterParamsFromSchema(operationSchema),
 				router.WithSuccessResponse(http.StatusOK, "A list of operations",
-					router.WithJSONContent(queryutil.Response[*dto.OperationListItem]{}),
+					router.WithJSONContent(dto.OperationListItemResponse{}),
 					router.WithTotalCountHeader(),
 				),
 			),
