@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	jsonschema "github.com/invopop/jsonschema"
 	"github.com/labstack/echo/v4"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/httputil"
@@ -22,6 +23,16 @@ import (
 	queryutilHttp "go.lumeweb.com/queryutil/http"
 	"gorm.io/gorm"
 )
+
+// stringUUIDSchema represents a UUID string for swagger schema generation
+type stringUUIDSchema string
+
+func (s stringUUIDSchema) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:   "string",
+		Format: "uuid",
+	}
+}
 
 func (a *API) buildAPIKeyRoutes(authMw echo.MiddlewareFunc, accessMw echo.MiddlewareFunc) []router.Route {
 	schemaProvider := queryutil.NewSchemaProvider()
@@ -57,7 +68,7 @@ func (a *API) buildAPIKeyRoutes(authMw echo.MiddlewareFunc, accessMw echo.Middle
 			router.WithSwaggerOptions(
 				router.WithSummary("Delete API Key"),
 				router.WithDescription("Deletes a specific API key for the authenticated user."),
-				router.WithPathParam("keyID", "The UUID of the API key to delete", uuid.Nil),
+				router.WithPathParam("keyID", "The UUID of the API key to delete", stringUUIDSchema("")),
 				router.WithResponseHeaders(http.StatusOK, "API Key deleted", nil, nil),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
