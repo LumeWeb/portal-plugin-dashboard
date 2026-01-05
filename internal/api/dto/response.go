@@ -27,6 +27,10 @@ type APIKeyCreateRequest struct {
 	Name string `json:"name"`
 }
 
+type APIKeyFilterRequest struct {
+	Name string `json:"name" filter:"true"`
+}
+
 type UpdateProfileRequest struct {
 	FirstName *string `json:"first_name,omitempty"`
 	LastName  *string `json:"last_name,omitempty"`

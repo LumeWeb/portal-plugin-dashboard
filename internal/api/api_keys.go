@@ -24,6 +24,9 @@ import (
 )
 
 func (a *API) buildAPIKeyRoutes(authMw echo.MiddlewareFunc, accessMw echo.MiddlewareFunc) []router.Route {
+	schemaProvider := queryutil.NewSchemaProvider()
+	keysSchema := schemaProvider.ForType(dto.APIKeyFilterRequest{})
+
 	return []router.Route{
 		router.NewRoute(http.MethodPost, "/api/account/keys", a.createAPIKey,
 			router.WithSwaggerOptions(
@@ -40,6 +43,8 @@ func (a *API) buildAPIKeyRoutes(authMw echo.MiddlewareFunc, accessMw echo.Middle
 				router.WithSummary("List API Keys"),
 				router.WithDescription("Retrieves a list of API keys for the authenticated user."),
 				router.WithPaginationParams(),
+				router.WithSortParams(keysSchema.SortableFields()),
+				router.WithFilterParamsFromSchema(keysSchema),
 				router.WithSuccessResponse(http.StatusOK, "List of API Keys",
 					router.WithJSONContent(dto.APIKeyListResponse{}),
 					router.WithTotalCountHeader(),
