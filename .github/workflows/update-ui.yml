@@ -4,46 +4,16 @@ on:
   repository_dispatch:
     types: [update-ui]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
-  update-dependency:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.23.0'
-
-      - name: Update Go dependency
-        run: |
-          COMMIT_HASH="${{ github.event.client_payload.commit_hash }}"
-          VERSION="${{ github.event.client_payload.version }}"
-          APP_NAME="${{ github.event.client_payload.app_name }}"
-          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
-          
-          # Generate the new version string
-          NEW_VERSION="v${VERSION}-${APP_NAME}-go.0.${TIMESTAMP}-${COMMIT_HASH}"
-          
-          # Update the dependency
-          GOPROXY=direct go get "go.lumeweb.com/web/go/${APP_NAME}@${COMMIT_HASH}"
-          go mod tidy
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.PAT_TOKEN }}
-          commit-message: "chore: update UI dependency to ${{ github.event.client_payload.version }}"
-          title: "chore: update UI dependency to ${{ github.event.client_payload.version }}"
-          body: |
-            Updates UI dependency to latest changes.
-            
-            Source: ${{ github.event.client_payload.repository }}@${{ github.event.client_payload.commit_hash }}
-            Version: ${{ github.event.client_payload.version }}
-          branch: deps/update-ui
-          base: develop
-          delete-branch: true
-          labels: |
-            dependencies
-            automated pr
+  call-workflow:
+    uses: LumeWeb/workflows/.github/workflows/update-ui.yml@develop
+    with:
+      commit_hash: ${{ github.event.client_payload.commit_hash }}
+      app_name: ${{ github.event.client_payload.app_name }}
+      repository: ${{ github.event.client_payload.repository }}
+    secrets:
+      PAT: ${{ secrets.PAT }}
