@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"go.lumeweb.com/portal/core/testing/mocks"
 	"go.lumeweb.com/portal/db/models"
 	"gorm.io/gorm"
 )
@@ -23,8 +23,8 @@ import (
 func TestOTPGenerate_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		otpSvc := core.GetService[*mocks.MockOTPService](ctx, core.OTP_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		otpSvc := core.GetService[*coreTesting.MockOTPService](ctx, core.OTP_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -35,8 +35,8 @@ func TestOTPGenerate_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		otpSvc.On("OTPGenerate", uint(1)).Return("otp-secret", nil).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		otpSvc.EXPECT().OTPGenerate(mock.Anything, uint(1)).Return("otp-secret", nil).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()
@@ -84,8 +84,8 @@ func TestOTPGenerate_Failure_Unauthorized(t *testing.T) {
 func TestOTPVerify_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		otpSvc := core.GetService[*mocks.MockOTPService](ctx, core.OTP_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		otpSvc := core.GetService[*coreTesting.MockOTPService](ctx, core.OTP_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -96,8 +96,8 @@ func TestOTPVerify_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		otpSvc.On("OTPEnable", uint(1), "123456").Return(nil).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		otpSvc.EXPECT().OTPEnable(mock.Anything, uint(1), "123456").Return(nil).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()
@@ -156,8 +156,8 @@ func TestOTPVerify_Failure_Unauthorized(t *testing.T) {
 func TestOTPVerify_Failure_InvalidOTP(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		otpSvc := core.GetService[*mocks.MockOTPService](ctx, core.OTP_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		otpSvc := core.GetService[*coreTesting.MockOTPService](ctx, core.OTP_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -171,8 +171,8 @@ func TestOTPVerify_Failure_InvalidOTP(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		otpSvc.On("OTPEnable", uint(1), invalidTOTPCode).Return(core.ErrInvalidOTPCode).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		otpSvc.EXPECT().OTPEnable(mock.Anything, uint(1), invalidTOTPCode).Return(core.ErrInvalidOTPCode).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()
@@ -204,7 +204,7 @@ func TestOTPVerify_Failure_InvalidOTP(t *testing.T) {
 func TestOTPValidate_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		authSvc := core.GetService[*mocks.MockAuthService](ctx, core.AUTH_SERVICE)
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -218,7 +218,7 @@ func TestOTPValidate_Success(t *testing.T) {
 		jwtToken := CreateTestLoginToken(tb, ctx, "1")
 
 		// Mock expectations
-		authSvc.On("LoginOTP", uint(1), validTOTPCode, false).Return(jwtToken, nil).Once()
+		authSvc.EXPECT().LoginOTP(mock.Anything, uint(1), validTOTPCode, false).Return(jwtToken, nil).Once()
 
 		// Create request
 		reqBody := dto.OTPValidateRequest{
@@ -246,9 +246,9 @@ func TestOTPValidate_Success(t *testing.T) {
 func TestOTPDisable_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		authSvc := core.GetService[*mocks.MockAuthService](ctx, core.AUTH_SERVICE)
-		otpSvc := core.GetService[*mocks.MockOTPService](ctx, core.OTP_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		otpSvc := core.GetService[*coreTesting.MockOTPService](ctx, core.OTP_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -259,9 +259,9 @@ func TestOTPDisable_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		authSvc.On("ValidLoginByUserID", uint(1), "password").Return(true, mockUser, nil).Once()
-		otpSvc.On("OTPDisable", uint(1)).Return(nil).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		authSvc.EXPECT().ValidLoginByUserID(mock.Anything, uint(1), "password").Return(true, mockUser, nil).Once()
+		otpSvc.EXPECT().OTPDisable(mock.Anything, uint(1)).Return(nil).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()
@@ -320,8 +320,8 @@ func TestOTPDisable_Failure_Unauthorized(t *testing.T) {
 func TestOTPDisable_Failure_InvalidPassword(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		authSvc := core.GetService[*mocks.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -332,8 +332,8 @@ func TestOTPDisable_Failure_InvalidPassword(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		authSvc.On("ValidLoginByUserID", uint(1), "wrongpassword").Return(false, nil, nil).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		authSvc.EXPECT().ValidLoginByUserID(mock.Anything, uint(1), "wrongpassword").Return(false, nil, nil).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()

@@ -8,23 +8,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"go.lumeweb.com/portal/core/testing/mocks"
 	"go.lumeweb.com/portal/db/models"
-	"gorm.io/gorm"
+	"github.com/samber/lo"
+"gorm.io/gorm"
 )
 
 func TestUpdateProfile_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -40,8 +40,8 @@ func TestUpdateProfile_Success(t *testing.T) {
 
 		// Mock expectations
 		// AccountExists is called twice - once by auth middleware and once by our handler
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Twice()
-		userSvc.On("UpdateAccountName", uint(1), "NewFirst", "NewLast").
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Twice()
+		userSvc.EXPECT().UpdateAccountName(mock.Anything, uint(1), "NewFirst", "NewLast").
 			Return(nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -77,7 +77,7 @@ func TestUpdateProfile_Success(t *testing.T) {
 func TestUpdateProfile_NoChanges(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -92,7 +92,7 @@ func TestUpdateProfile_NoChanges(t *testing.T) {
 		}
 
 		// Mock expectations
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Twice()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Twice()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()

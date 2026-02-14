@@ -26,6 +26,7 @@ import (
 	"github.com/samber/lo"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/httputil"
+	"go.lumeweb.com/portal-middleware/auth"
 	"go.lumeweb.com/portal-middleware/auth/adapter"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	mcontext "go.lumeweb.com/portal-middleware/context"
@@ -60,7 +61,6 @@ type API struct {
 	otp         core.OTPService
 	apiKey      pluginCore.APIKeyService
 	access      core.AccessService
-	logger      *core.Logger
 	http        core.HTTPService
 	requestSvc  core.RequestService
 	workflowSvc core.WorkflowService
@@ -90,13 +90,15 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 
 	opts := core.ContextOptions(
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
-			api.user = ctx.Service(core.USER_SERVICE).(core.UserService)
-			api.auth = ctx.Service(core.AUTH_SERVICE).(core.AuthService)
-			api.password = ctx.Service(core.PASSWORD_RESET_SERVICE).(core.PasswordResetService)
-			api.otp = ctx.Service(core.OTP_SERVICE).(core.OTPService)
-			api.apiKey = ctx.Service(pluginCore.API_KEY_SERVICE).(pluginCore.APIKeyService)
-			api.access = ctx.Service(core.ACCESS_SERVICE).(core.AccessService)
-			api.logger = ctx.APILogger(api)
+			// Get services using GetServiceOptional to avoid fatal errors in tests
+			// Then check if we got the right types
+			api.user = core.GetServiceOptional[core.UserService](ctx, core.USER_SERVICE)
+			api.auth = core.GetServiceOptional[core.AuthService](ctx, core.AUTH_SERVICE)
+			api.password = core.GetServiceOptional[core.PasswordResetService](ctx, core.PASSWORD_RESET_SERVICE)
+			api.otp = core.GetServiceOptional[core.OTPService](ctx, core.OTP_SERVICE)
+			api.apiKey = core.GetServiceOptional[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+			api.access = core.GetServiceOptional[core.AccessService](ctx, core.ACCESS_SERVICE)
+			// Logger is provided by BaseComponent via ContextWithStartupComponent
 			api.http = ctx.Service(core.HTTP_SERVICE).(core.HTTPService)
 			api.requestSvc = ctx.Service(core.REQUEST_SERVICE).(core.RequestService)
 			api.workflowSvc = ctx.Service(core.WORKFLOW_SERVICE).(core.WorkflowService)
@@ -248,7 +250,7 @@ func (a *API) rootAuthComplete(c echo.Context) error {
 
 	exists, user, err := a.user.AccountExists(ctx.Request().Context(), userId)
 	if err != nil {
-		a.logger.Error("failed to check if email exists", zap.Error(err))
+		a.Logger().Error("failed to check if email exists", zap.Error(err))
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 

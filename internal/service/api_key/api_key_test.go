@@ -7,19 +7,29 @@ import (
 
 	"github.com/google/uuid"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
+	pluginDbMigrations "go.lumeweb.com/portal-plugin-dashboard/internal/db/migrations"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/queryutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
+
 	"gorm.io/gorm"
 )
 
 func TestMain(m *testing.M) {
+	// Create a mock plugin with migrations and the api_key service
+	pluginBuilder := coreTesting.NewMockPluginBuilder(pluginCore.API_KEY_SERVICE).
+		WithMigrations(core.DBMigration{
+			core.DB_TYPE_SQLITE: pluginDbMigrations.GetSQLite(),
+		}).
+		WithModels(&pluginDb.APIKey{}).
+		WithService(pluginCore.API_KEY_SERVICE, NewAPIKeyService)
+
 	coreTesting.WithDBAndOptions(m,
-		coreTesting.WithService(pluginCore.API_KEY_SERVICE, NewAPIKeyService),
+		pluginBuilder.BuilderOption(),
 	)
 }
 

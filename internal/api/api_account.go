@@ -162,7 +162,7 @@ func (a *API) accountInfo(c echo.Context) error {
 	}
 
 	if err := a.setAvatarURL(ctx, user, &responseDto); err != nil {
-		a.logger.Error("failed to set avatar URL", zap.Error(err))
+		a.Logger().Error("failed to set avatar URL", zap.Error(err))
 	}
 
 	return httputil.EncodeResponse[*models.User](ctx, acct, &responseDto)
@@ -256,13 +256,13 @@ func (a *API) verifyEmail(c echo.Context) error {
 			_jwt, loginErr := a.auth.LoginID(ctx.Request().Context(), user.ID, ctx.RealIP(), remember)
 			if loginErr != nil {
 				acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, loginErr)
-				a.logger.Error("failed to auto-login after email verification", zap.Error(acctErr))
+				a.Logger().Error("failed to auto-login after email verification", zap.Error(acctErr))
 				// Don't return error here - email verification was successful, just auto-login failed
 			} else {
 				// Set the authentication cookie with the remember flag
 				if setCookieErr := a.setAuthCookieWithRemember(c, _jwt, remember); setCookieErr != nil {
 					acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, setCookieErr)
-					a.logger.Error("failed to set auth cookie after email verification", zap.Error(acctErr))
+					a.Logger().Error("failed to set auth cookie after email verification", zap.Error(acctErr))
 					// Don't return error here - email verification was successful, just cookie setting failed
 				}
 			}
@@ -394,17 +394,17 @@ func (a *API) updateProfile(c echo.Context) error {
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
-			a.logger.Error("failed to find user", zap.Error(acctErr), zap.Uint("user_id", userID))
+			a.Logger().Error("failed to find user", zap.Error(acctErr), zap.Uint("user_id", userID))
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
-		a.logger.Error("failed to find user", zap.Error(acctErr), zap.Uint("user_id", userID))
+		a.Logger().Error("failed to find user", zap.Error(acctErr), zap.Uint("user_id", userID))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
 	if !exists {
 		acctErr := core.NewAccountError(core.ErrKeyUserNotFound, nil)
-		a.logger.Error("user not found", zap.Error(acctErr))
+		a.Logger().Error("user not found", zap.Error(acctErr))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
@@ -413,7 +413,7 @@ func (a *API) updateProfile(c echo.Context) error {
 
 	// Short-circuit if there are no changes
 	if firstName == existingUser.FirstName && lastName == existingUser.LastName {
-		a.logger.Debug("no profile changes; skipping update", zap.Uint("user_id", userID))
+		a.Logger().Debug("no profile changes; skipping update", zap.Uint("user_id", userID))
 		return c.NoContent(http.StatusOK)
 	}
 
@@ -421,11 +421,11 @@ func (a *API) updateProfile(c echo.Context) error {
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
-			a.logger.Error("failed to update profile", zap.Error(acctErr), zap.Uint("user_id", userID))
+			a.Logger().Error("failed to update profile", zap.Error(acctErr), zap.Uint("user_id", userID))
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
-		a.logger.Error("failed to update profile", zap.Error(acctErr), zap.Uint("user_id", userID))
+		a.Logger().Error("failed to update profile", zap.Error(acctErr), zap.Uint("user_id", userID))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
