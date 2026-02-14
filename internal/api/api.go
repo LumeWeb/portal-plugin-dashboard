@@ -26,7 +26,6 @@ import (
 	"github.com/samber/lo"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/httputil"
-	"go.lumeweb.com/portal-middleware/auth"
 	"go.lumeweb.com/portal-middleware/auth/adapter"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	mcontext "go.lumeweb.com/portal-middleware/context"
