@@ -306,8 +306,32 @@ func (a *API) getUser(ctx httputil.RequestContext) (uint, bool) {
 	return user, true
 }
 
-func (a *API) getAuthToken(ctx httputil.RequestContext) (string, bool) {
+// extractAuthToken extracts the raw auth token from the request.
+// First checks the request context (set by auth middleware), then falls back to
+// reading the Authorization header directly for public endpoints like /api/auth/key.
+// It does NOT write responses or validate the token - that's the caller's responsibility.
+func (a *API) extractAuthToken(ctx httputil.RequestContext) (string, error) {
+	// Try context first (for middleware-set tokens from authenticated requests)
 	token, err := mcontext.GetAuthToken(ctx.Context)
+	if err == nil && token != "" {
+		return token, nil
+	}
+
+	// Fall back to reading Authorization header directly (for public endpoints)
+	// Use the helper from auth middleware which handles Bearer/bearer prefixes
+	authToken := auth.ParseAuthTokenHeader(ctx.Request().Header)
+	if authToken == "" {
+		return "", errors.New("missing authorization header")
+	}
+
+	return authToken, nil
+}
+
+// getAuthToken extracts and validates the auth token, writing an error response if missing.
+// This returns (token, ok) for backward compatibility with existing code.
+// DEPRECATED: Use extractAuthToken and handle errors explicitly in new code.
+func (a *API) getAuthToken(ctx httputil.RequestContext) (string, bool) {
+	token, err := a.extractAuthToken(ctx)
 
 	if err != nil {
 		_ = ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)

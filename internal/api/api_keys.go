@@ -179,44 +179,61 @@ func (a *API) deleteAPIKey(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-func (a *API) authWithAPIKey(c echo.Context) error {
-	ctx := httputil.Context(c)
-
-	token, ok := a.getAuthToken(ctx)
-	if !ok {
-		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
+// parseAPIKeyToken extracts, decodes, and validates an API key JWT from the Authorization header.
+// Returns the parsed userID and keyID, or an error that the caller can convert to an HTTP response.
+func (a *API) parseAPIKeyToken(ctx httputil.RequestContext) (userID uint, keyID uuid.UUID, err error) {
+	token, err := a.extractAuthToken(ctx)
+	if err != nil {
+		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, err)
 	}
 
-	// Decode the token once
+	// Decode the token
 	decodedToken, err := jwt.DecodeToken(token, &jwt.RegisteredClaims{})
 	if err != nil {
-		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusUnauthorized)
+		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, err)
 	}
 
 	claims, ok := decodedToken.(*jwt.RegisteredClaims)
 	if !ok {
-		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, errors.New("invalid token claims")), http.StatusUnauthorized)
+		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, errors.New("invalid token claims"))
 	}
 
 	// Extract user ID from the subject claim
-	userID, err := strconv.ParseUint(claims.Subject, 10, 64)
+	parsedUserID, err := strconv.ParseUint(claims.Subject, 10, 64)
 	if err != nil {
-		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusUnauthorized)
+		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, err)
+	}
+
+	if parsedUserID == 0 {
+		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, errors.New("invalid user ID in token"))
 	}
 
 	// Extract key ID from the token ID claim
-	keyID, err := uuid.Parse(claims.ID)
+	parsedKeyID, err := uuid.Parse(claims.ID)
 	if err != nil {
-		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusUnauthorized)
+		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, errors.New("invalid key ID in token"))
 	}
 
-	// Validate the API key using the parsed user ID and key ID
-	validatedKey, err := a.apiKey.ValidateAPIKey(ctx.Request().Context(), uint(userID), keyID)
+	return uint(parsedUserID), parsedKeyID, nil
+}
+
+func (a *API) authWithAPIKey(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	// Extract and validate the API key token
+	userID, keyID, err := a.parseAPIKeyToken(ctx)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusUnauthorized)
+	}
+
+	// Validate the API key using the parsed user ID and key ID
+	validatedKey, err := a.apiKey.ValidateAPIKey(ctx.Request().Context(), userID, keyID)
+	if err != nil {
+		// ValidateAPIKey returns a generic error, convert to account error
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusUnauthorized)
 	}
 
