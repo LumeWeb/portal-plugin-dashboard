@@ -78,7 +78,7 @@ func (a *API) uploadAvatar(c echo.Context) error {
 	defer func(src io.ReadSeekCloser) {
 		err := src.Close()
 		if err != nil {
-			a.logger.Error("failed to close avatar file", zap.Error(err))
+			a.Logger().Error("failed to close avatar file", zap.Error(err))
 		}
 	}(upload.File)
 
@@ -147,7 +147,7 @@ func (a *API) getAvatar(c echo.Context) error {
 		defer func(reader io.ReadCloser) {
 			err := reader.Close()
 			if err != nil {
-				a.logger.Error("failed to close avatar reader", zap.Error(err))
+				a.Logger().Error("failed to close avatar reader", zap.Error(err))
 			}
 		}(reader)
 		ct := "application/octet-stream"

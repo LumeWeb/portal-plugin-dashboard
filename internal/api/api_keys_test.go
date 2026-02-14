@@ -17,10 +17,8 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
-	"go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"go.lumeweb.com/portal/core/testing/mocks"
 	"go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/portal/db/types"
 	"gorm.io/gorm"
@@ -29,8 +27,8 @@ import (
 func TestCreateAPIKey_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, api_key.API_KEY_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
+		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -42,13 +40,13 @@ func TestCreateAPIKey_Success(t *testing.T) {
 		}
 
 		// AccountExists is called once by auth middleware
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
 		mockAPIKey := &pluginDb.APIKey{
 			UUID: types.NewBinUUID(),
 			Name: "test-key",
 			JWT:  "generated-jwt-token",
 		}
-		apiKeySvc.On("CreateAPIKey", uint(1), "test-key").
+		apiKeySvc.EXPECT().CreateAPIKey(mock.Anything, uint(1), "test-key").
 			Return(&pluginDb.APIKey{
 				UUID: mockAPIKey.UUID,
 				Name: "test-key",
@@ -97,7 +95,7 @@ func TestCreateAPIKey_Success(t *testing.T) {
 func TestCreateAPIKey_Failure_Unauthorized(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -130,7 +128,7 @@ func TestCreateAPIKey_Failure_Unauthorized(t *testing.T) {
 func TestCreateAPIKey_Failure_InvalidInput(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -141,7 +139,7 @@ func TestCreateAPIKey_Failure_InvalidInput(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()
@@ -176,8 +174,8 @@ func TestCreateAPIKey_Failure_InvalidInput(t *testing.T) {
 func TestGetAPIKeys_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, api_key.API_KEY_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
+		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -202,8 +200,8 @@ func TestGetAPIKeys_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		apiKeySvc.On("GetAPIKeys", uint(1), mock.Anything, mock.Anything, mock.Anything).
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		apiKeySvc.EXPECT().GetAPIKeys(mock.Anything, uint(1), mock.Anything, mock.Anything, mock.Anything).
 			Return(mockKeys, int64(2), nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -243,7 +241,7 @@ func TestGetAPIKeys_Success(t *testing.T) {
 func TestGetAPIKeys_Failure_Unauthorized(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -267,8 +265,8 @@ func TestGetAPIKeys_Failure_Unauthorized(t *testing.T) {
 func TestDeleteAPIKey_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, api_key.API_KEY_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
+		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -282,8 +280,8 @@ func TestDeleteAPIKey_Success(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		apiKeySvc.On("DeleteAPIKey", uint(1), keyUUID.ToUUID()).Return(nil).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		apiKeySvc.EXPECT().DeleteAPIKey(mock.Anything, uint(1), keyUUID.ToUUID()).Return(nil).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()
@@ -312,7 +310,7 @@ func TestDeleteAPIKey_Success(t *testing.T) {
 func TestDeleteAPIKey_Failure_Unauthorized(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -341,8 +339,8 @@ func TestDeleteAPIKey_Failure_Unauthorized(t *testing.T) {
 func TestDeleteAPIKey_Failure_NotFound(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, api_key.API_KEY_SERVICE)
+		userSvc := coreTesting.GetMockUserService(ctx)
+		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, pluginCore.API_KEY_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -356,8 +354,8 @@ func TestDeleteAPIKey_Failure_NotFound(t *testing.T) {
 			Email: "test@example.com",
 		}
 
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		apiKeySvc.On("DeleteAPIKey", uint(1), keyUUID.ToUUID()).Return(gorm.ErrRecordNotFound).Once()
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		apiKeySvc.EXPECT().DeleteAPIKey(mock.Anything, uint(1), keyUUID.ToUUID()).Return(gorm.ErrRecordNotFound).Once()
 
 		// Create valid JWT token using the context's identity
 		pk := ctx.Config().Config().Core.Identity.PrivateKey()

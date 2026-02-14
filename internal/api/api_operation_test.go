@@ -17,7 +17,6 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"go.lumeweb.com/portal/core/testing/mocks"
 	"go.lumeweb.com/portal/db/models"
 	"gorm.io/gorm"
 )
@@ -34,8 +33,8 @@ func TestListOperations_Success(t *testing.T) {
 		cid2 := cid.NewCidV1(cid.DagProtobuf, hash2)
 
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*coreTesting.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -92,12 +91,12 @@ func TestListOperations_Success(t *testing.T) {
 		}
 
 		// Mock expectations
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.On("ListWorkflowInstances", mock.Anything, uint(1), mock.Anything, mock.Anything, mock.Anything).
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.EXPECT().ListWorkflowInstances(mock.Anything, uint(1), mock.Anything, mock.Anything, mock.Anything).
 			Return(mockInstances, int64(2), nil).Once()
-		workflowSvc.On("GetWorkflowStatus", mock.Anything, uint(1)).
+		workflowSvc.EXPECT().GetWorkflowStatus(mock.Anything, uint(1)).
 			Return(mockInstances[0].Status, nil).Once()
-		workflowSvc.On("GetWorkflowStatus", mock.Anything, uint(2)).
+		workflowSvc.EXPECT().GetWorkflowStatus(mock.Anything, uint(2)).
 			Return(mockInstances[1].Status, nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -160,8 +159,8 @@ func TestListOperations_Success(t *testing.T) {
 func TestGetOperationFilters_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*coreTesting.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -179,8 +178,8 @@ func TestGetOperationFilters_Success(t *testing.T) {
 		}
 
 		// Mock expectations
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.On("ListDistinctWorkflowFilters", mock.Anything, uint(1), mock.Anything).
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.EXPECT().ListDistinctWorkflowFilters( mock.Anything, uint(1), mock.Anything).
 			Return(mockFilters, nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -254,8 +253,8 @@ func TestGetOperationFilters_Success(t *testing.T) {
 func TestGetOperationFilters_EmptyResult(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*coreTesting.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -267,8 +266,8 @@ func TestGetOperationFilters_EmptyResult(t *testing.T) {
 		}
 
 		// Mock expectations - empty filters map
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.On("ListDistinctWorkflowFilters", mock.Anything, uint(1), mock.Anything).
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.EXPECT().ListDistinctWorkflowFilters( mock.Anything, uint(1), mock.Anything).
 			Return(map[string][]string{}, nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -324,8 +323,8 @@ func TestGetOperationFilters_Failure_Unauthorized(t *testing.T) {
 func TestGetOperationFilters_Failure_WorkflowServiceError(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*coreTesting.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -337,8 +336,8 @@ func TestGetOperationFilters_Failure_WorkflowServiceError(t *testing.T) {
 		}
 
 		// Mock expectations - return error
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.On("ListDistinctWorkflowFilters", mock.Anything, uint(1), mock.Anything).
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.EXPECT().ListDistinctWorkflowFilters( mock.Anything, uint(1), mock.Anything).
 			Return(nil, assert.AnError).Once()
 
 		// Create valid JWT token using the context's identity
@@ -390,8 +389,8 @@ func TestGetOperation_Success(t *testing.T) {
 		testCID := cid.NewCidV1(cid.DagProtobuf, hash)
 
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*coreTesting.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -424,10 +423,10 @@ func TestGetOperation_Success(t *testing.T) {
 		}
 
 		// Mock expectations
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.On("GetWorkflowInstance", mock.Anything, uint(1), uint(1)).
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.EXPECT().GetWorkflowInstance(mock.Anything, uint(1), uint(1)).
 			Return(mockInstance, nil).Once()
-		workflowSvc.On("GetWorkflowStatus", mock.Anything, uint(1)).
+		workflowSvc.EXPECT().GetWorkflowStatus(mock.Anything, uint(1)).
 			Return(mockInstance.Status, nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -490,8 +489,8 @@ func TestGetOperation_Failure_Unauthorized(t *testing.T) {
 func TestGetOperation_Failure_NotFound(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
-		userSvc := core.GetService[*mocks.MockUserService](ctx, core.USER_SERVICE)
-		workflowSvc := core.GetService[*mocks.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+		workflowSvc := core.GetService[*coreTesting.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -503,8 +502,8 @@ func TestGetOperation_Failure_NotFound(t *testing.T) {
 		}
 
 		// Mock expectations
-		userSvc.On("AccountExists", uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.On("GetWorkflowInstance", mock.Anything, uint(1), uint(1)).
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
+		workflowSvc.EXPECT().GetWorkflowInstance( mock.Anything, uint(1), uint(1)).
 			Return(nil, gorm.ErrRecordNotFound).Once()
 
 		// Create valid JWT token using the context's identity

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
@@ -18,6 +19,23 @@ func CreateTestJWTToken(tb testing.TB, ctx coreTesting.TestContext, userID strin
 	jwtToken, err := jwt.CreateToken(pk, ctx.Config().Config().Core.Domain, userID, purpose, 90*24*time.Hour)
 	require.NoError(tb, err, "Failed to generate test JWT")
 	return jwtToken
+}
+
+// CreateTestAPIKeyToken generates a valid API key JWT for testing purposes
+func CreateTestAPIKeyToken(tb testing.TB, ctx coreTesting.TestContext, userID string, keyID uuid.UUID) string {
+	pk := ctx.Config().Config().Core.Identity.PrivateKey()
+	apiKeyToken, err := jwt.CreateToken(
+		pk,
+		ctx.Config().Config().Core.Domain,
+		userID,
+		jwt.PurposeAPI,
+		24*time.Hour,
+		jwt.WithClaims(&jwt.RegisteredClaims{
+			ID: keyID.String(),
+		}),
+	)
+	require.NoError(tb, err, "Failed to generate test API key token")
+	return apiKeyToken
 }
 
 // CreateTestLoginToken generates a valid JWT token with login purpose for testing

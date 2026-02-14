@@ -6,7 +6,6 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
-	pluginService "go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -23,6 +22,6 @@ func TestMain(m *testing.M) {
 			Subdomain: "account",
 		}),
 		// Explicitly add the APIKeyService mock, as it's not in the core defaults
-		coreTesting.WithMockServiceFactory(pluginService.API_KEY_SERVICE, pluginCore.NewMockAPIKeyService),
+		coreTesting.WithMockServiceFactory(pluginCore.API_KEY_SERVICE, pluginCore.NewMockAPIKeyService),
 	)
 }

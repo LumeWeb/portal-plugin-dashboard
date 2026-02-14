@@ -124,7 +124,7 @@ func (a *API) login(c echo.Context) error {
 	exists, _, err := a.user.EmailExists(ctx.Request().Context(), requestDto.Email)
 	if err != nil {
 		acctErr := core.NewAccountError(core.ErrKeyDatabaseOperationFailed, err)
-		a.logger.Error("failed to check if email exists", zap.Error(acctErr), zap.String("email", requestDto.Email))
+		a.Logger().Error("failed to check if email exists", zap.Error(acctErr), zap.String("email", requestDto.Email))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
@@ -136,7 +136,7 @@ func (a *API) login(c echo.Context) error {
 	_jwt, user, err := a.auth.LoginPassword(ctx.Request().Context(), requestDto.Email, requestDto.Password, ctx.RealIP(), requestDto.Remember)
 	if err != nil || user == nil {
 		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
-		a.logger.Error("failed to login", zap.Error(acctErr))
+		a.Logger().Error("failed to login", zap.Error(acctErr))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
@@ -144,7 +144,7 @@ func (a *API) login(c echo.Context) error {
 		// Set short-lived 2FA cookie; do not apply remember-me here
 		if err = a.setAuthCookieWithRemember(c, _jwt, false); err != nil {
 			acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
-			a.logger.Error("failed to set auth cookie", zap.Error(acctErr))
+			a.Logger().Error("failed to set auth cookie", zap.Error(acctErr))
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
 
@@ -181,11 +181,11 @@ func (a *API) register(c echo.Context) error {
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
-			a.logger.Error("failed to create account", zap.Error(acctErr))
+			a.Logger().Error("failed to create account", zap.Error(acctErr))
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
 		acctErr := core.NewAccountError(core.ErrKeyAccountCreationFailed, err)
-		a.logger.Error("failed to create account", zap.Error(acctErr))
+		a.Logger().Error("failed to create account", zap.Error(acctErr))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
@@ -193,11 +193,11 @@ func (a *API) register(c echo.Context) error {
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
-			a.logger.Error("failed to update account name", zap.Error(acctErr), zap.Uint("user_id", user.ID))
+			a.Logger().Error("failed to update account name", zap.Error(acctErr), zap.Uint("user_id", user.ID))
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
 		acctErr := core.NewAccountError(core.ErrKeyAccountCreationFailed, err)
-		a.logger.Error("failed to update account name", zap.Error(acctErr), zap.Uint("user_id", user.ID))
+		a.Logger().Error("failed to update account name", zap.Error(acctErr), zap.Uint("user_id", user.ID))
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
