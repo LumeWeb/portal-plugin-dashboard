@@ -30,6 +30,7 @@ func (a *API) buildOTPRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.Mid
 		),
 		router.NewRoute(http.MethodPost, "/api/auth/otp/validate", a.otpValidate,
 			router.WithSwaggerOptions(
+				router.WithoutDefaultSuccessResponse(),
 				router.WithSummary("Validate OTP code"),
 				router.WithDescription("Validates an OTP code to complete 2FA login."),
 				router.WithRequestBody(dto.OTPValidateRequest{}, "OTP code", true),
