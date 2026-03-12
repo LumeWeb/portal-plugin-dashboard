@@ -34,7 +34,7 @@ func TestLogin_Success(t *testing.T) {
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
 
-		// Mock expectations - use underlying MockUserService.EXPECT() for direct control
+		// Mock expectations
 		mockUser := &models.User{
 			Model:       gorm.Model{ID: 1},
 			Email:       "user@example.com",
@@ -44,11 +44,9 @@ func TestLogin_Success(t *testing.T) {
 
 		userSvc.MockUserService.EXPECT().EmailExists(mock.Anything, "user@example.com").Return(true, mockUser, nil).Once()
 
-		// Create a valid JWT token for the mock to return
+		// Create a valid JWT token and register it for lazy return
 		testToken := CreateTestLoginToken(tb, ctx, "1")
-
-		authSvc.MockAuthService.EXPECT().LoginPassword(mock.Anything, "user@example.com", "password", mock.Anything, false).
-			Return(testToken, mockUser, nil).Once()
+		authSvc.RegisterLoginToken("user@example.com", testToken)
 
 		// Create valid request
 		reqBody := dto.LoginRequest{
@@ -98,7 +96,6 @@ func TestLogin_OTPRequired(t *testing.T) {
 
 		// Create a valid JWT token for the mock to return
 		testToken := CreateTestLoginToken(tb, ctx, "1")
-
 		authSvc.MockAuthService.EXPECT().LoginPassword(mock.Anything, "user@example.com", "password", mock.Anything, false).
 			Return(testToken, mockUser, nil).Once()
 
