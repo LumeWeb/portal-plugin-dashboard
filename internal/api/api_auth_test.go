@@ -46,7 +46,7 @@ func TestLogin_Success(t *testing.T) {
 
 		// Create a valid JWT token and register it for lazy return
 		testToken := CreateTestLoginToken(tb, ctx, "1")
-		authSvc.RegisterLoginToken("user@example.com", testToken)
+		authSvc.RegisterLoginTokenWithUser("user@example.com", testToken, mockUser)
 
 		// Create valid request
 		reqBody := dto.LoginRequest{
