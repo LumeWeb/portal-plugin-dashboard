@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	z "github.com/Oudwins/zog"
-	"github.com/Oudwins/zog/internals"
+	"github.com/Oudwins/zog/pkgs/internals"
 	"go.lumeweb.com/portal/config"
 )
 
