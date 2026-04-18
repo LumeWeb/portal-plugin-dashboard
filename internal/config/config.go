@@ -4,7 +4,7 @@ import (
 	"reflect"
 
 	z "github.com/Oudwins/zog"
-	"github.com/Oudwins/zog/pkg/internals"
+	"github.com/Oudwins/zog/pkgs/internals"
 	"go.lumeweb.com/portal/config"
 )
 
