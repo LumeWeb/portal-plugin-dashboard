@@ -1,10 +1,11 @@
 package config
 
 import (
-	z "github.com/Oudwins/zog"
-	"github.com/Oudwins/zog/internals"
-	"go.lumeweb.com/portal/config"
 	"reflect"
+
+	z "github.com/Oudwins/zog"
+	"github.com/Oudwins/zog/pkg/internals"
+	"go.lumeweb.com/portal/config"
 )
 
 var _ config.APIConfig = (*APIConfig)(nil)
