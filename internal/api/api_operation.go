@@ -196,9 +196,11 @@ func (a *API) listOperations(c echo.Context) error {
 		c.Request(),
 		"operations",
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*dto.OperationListItem, int64, error) {
+			dbFilters := mapOperationFilters(filters)
+			dbSorts := mapOperationSorts(sorts)
+
 			reqCtx := ctx.Request().Context()
-			// Use ListWorkflowInstances instead of GetRequests
-			instances, total, err := a.workflowSvc.ListWorkflowInstances(reqCtx, userID, filters, sorts, pagination)
+			instances, total, err := a.workflowSvc.ListWorkflowInstances(reqCtx, userID, dbFilters, dbSorts, pagination)
 			if err != nil {
 				return nil, 0, err
 			}
