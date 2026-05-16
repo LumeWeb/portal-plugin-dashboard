@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+
 	"github.com/ipfs/go-cid"
 	queryutilFilter "go.lumeweb.com/queryutil/filter"
 )
@@ -16,41 +18,52 @@ var operationFieldMappings = map[string]string{
 	"cid":            "hash",
 }
 
-func mapOperationFilters(filters []queryutilFilter.CrudFilter) []queryutilFilter.CrudFilter {
+func mapOperationFilters(filters []queryutilFilter.CrudFilter) ([]queryutilFilter.CrudFilter, error) {
 	result := make([]queryutilFilter.CrudFilter, 0, len(filters))
 	for _, f := range filters {
-		result = append(result, mapOperationFilter(f))
+		mapped, err := mapOperationFilter(f)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, mapped)
 	}
-	return result
+	return result, nil
 }
 
-func mapOperationFilter(f queryutilFilter.CrudFilter) queryutilFilter.CrudFilter {
+func mapOperationFilter(f queryutilFilter.CrudFilter) (queryutilFilter.CrudFilter, error) {
 	switch v := f.(type) {
 	case *queryutilFilter.LogicalFilter:
 		field := v.Field()
 		dbField, mapped := operationFieldMappings[field]
 		if !mapped {
-			return f
+			return f, nil
 		}
 
 		value := v.GetValue()
 		if field == "cid" {
 			decoded, err := decodeCIDToMultihash(value)
-			if err != nil || decoded == nil {
-				return f
+			if err != nil {
+				return nil, fmt.Errorf("invalid cid filter value: %w", err)
 			}
-			return queryutilFilter.NewLogicalFilter(dbField, v.Operator(), decoded)
+			if decoded == nil {
+				return nil, fmt.Errorf("cid filter requires a string value, got %T", value)
+			}
+			return queryutilFilter.NewLogicalFilter(dbField, v.Operator(), decoded), nil
 		}
 
-		return queryutilFilter.NewLogicalFilter(dbField, v.Operator(), value)
+		return queryutilFilter.NewLogicalFilter(dbField, v.Operator(), value), nil
 	case *queryutilFilter.ConditionalFilter:
 		mappedFilters := make([]queryutilFilter.CrudFilter, 0, len(v.Filters))
 		for _, nested := range v.Filters {
-			mappedFilters = append(mappedFilters, mapOperationFilter(nested))
+			mapped, err := mapOperationFilter(nested)
+			if err != nil {
+				return nil, err
+			}
+			mappedFilters = append(mappedFilters, mapped)
 		}
-		return queryutilFilter.NewConditionalFilter(queryutilFilter.LogicalOperator(v.GetOperator()), mappedFilters)
+		return queryutilFilter.NewConditionalFilter(queryutilFilter.LogicalOperator(v.GetOperator()), mappedFilters), nil
 	default:
-		return f
+		return f, nil
 	}
 }
 

@@ -196,7 +196,10 @@ func (a *API) listOperations(c echo.Context) error {
 		c.Request(),
 		"operations",
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*dto.OperationListItem, int64, error) {
-			dbFilters := mapOperationFilters(filters)
+			dbFilters, err := mapOperationFilters(filters)
+			if err != nil {
+				return nil, 0, err
+			}
 			dbSorts := mapOperationSorts(sorts)
 
 			reqCtx := ctx.Request().Context()
