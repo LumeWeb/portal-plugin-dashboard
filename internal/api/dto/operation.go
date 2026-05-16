@@ -21,10 +21,14 @@ type OperationRequest struct {
 }
 
 type OperationFilterRequest struct {
-	ID              uint64  `json:"id" filter:"true"`
-	Operation       string  `json:"operation" filter:"true"`
-	ProgressPercent float64 `json:"progress_percent" filter:"true"`
-	CID             string  `json:"cid" filter:"true"`
+	ID            uint64                   `json:"id" filter:"true"`
+	Operation     string                   `json:"operation" filter:"true"`
+	Protocol      string                   `json:"protocol" filter:"true"`
+	Status        models.RequestStatusType `json:"status" filter:"true"`
+	StatusMessage string                   `json:"status_message" filter:"true"`
+	CID           string                   `json:"cid" filter:"true"`
+	StartedAt     time.Time                `json:"started_at" filter:"true"`
+	UpdatedAt     time.Time                `json:"updated_at" filter:"true"`
 }
 
 func (r *OperationRequest) Schema() *z.StructSchema {
@@ -46,14 +50,14 @@ type OperationListItem struct {
 	Status                models.RequestStatusType `json:"status" filter:"true" sort:"true"`
 	StatusDisplayName     string                   `json:"status_display_name"`
 	StatusMessage         string                   `json:"status_message" filter:"true" sort:"true"`
-	ProgressPercent       float64                  `json:"progress_percent" filter:"true" sort:"true"`
+	ProgressPercent       float64                  `json:"progress_percent"`
 	StartedAt             time.Time                `json:"started_at" filter:"true" sort:"true"`
 	UpdatedAt             time.Time                `json:"updated_at" filter:"true" sort:"true"`
-	EstimatedCompletionAt *time.Time               `json:"estimated_completion_at,omitempty" filter:"true" sort:"true"`
-	CID                   *string                  `json:"cid,omitempty" filter:"true" sort:"true"`
-	TotalSteps            *int64                   `json:"total_steps,omitempty" filter:"true" sort:"true"`
-	CurrentStep           *int64                   `json:"current_step,omitempty" filter:"true" sort:"true"`
-	Error                 *string                  `json:"error,omitempty" filter:"true" sort:"true"`
+	EstimatedCompletionAt *time.Time               `json:"estimated_completion_at,omitempty"`
+	CID                   *string                  `json:"cid,omitempty" filter:"true"`
+	TotalSteps            *int64                   `json:"total_steps,omitempty"`
+	CurrentStep           *int64                   `json:"current_step,omitempty"`
+	Error                 *string                  `json:"error,omitempty"`
 }
 
 func (r *OperationListItem) FromModel(model *OperationListItem) error {
