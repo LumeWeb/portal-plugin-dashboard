@@ -1,4 +1,4 @@
-module go.lumeweb.com/portal-plugin-dashboard
+module go.lumeweb.com/portal-plugin-dashboard // v0.3.0
 
 go 1.26.0
 

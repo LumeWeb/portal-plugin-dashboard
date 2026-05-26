@@ -1,5 +1,75 @@
 # @lumeweb/portal-plugin-dashboard
 
+## 0.3.0 (2026-05-26)
+
+### Breaking Changes
+
+- Replaced Gorilla Mux with Echo framework, potentially requiring updates to existing middleware and route configurations.
+
+This commit introduces a major architectural overhaul of the API, modernizing its structure, dependencies, and overall design. Key changes include:
+
+Core Framework:
+- Replaced Gorilla Mux with Echo framework for improved performance and middleware support
+- Implemented layered architecture with clear separation of concerns
+- Introduced DTO (Data Transfer Object) pattern for request/response payloads, enabling structured data handling and validation
+- Implemented dependency injection for services, enhancing testability and modularity
+
+API Improvements:
+- Implemented comprehensive input validation using Zog schema validation
+- Standardized error handling and HTTP status code responses
+- Improved authentication middleware with JWT support
+- Enhanced social authentication flow with proper session management
+- Restructured API routes with improved organization
+
+### Features
+
+- add avatar upload and retrieval functionality
+- add profile update endpoint
+- implement remember me functionality for normal, and OTP auth
+- implement auto-login after email verification & update default theme
+- add operation filters endpoint
+- add display name fields to OperationListItem and OperationDetailResponse
+- add description field to OperationFilterItem
+- improve API key authentication with better token handling
+
+### Fixes
+
+- wrong plugin db import
+- use plugin's own migrations instead of core
+- correct foreign key syntax in api_keys migrations
+- update API key response type in swagger schema
+- apply auth middleware to /api/auth/complete
+- add cors config to /api/auth/complete
+- update plugin config access usage
+- migrate sql migrations to goose syntax
+- zog passes test values as pointers, so we must use reflection
+- we need to depend on the core plugin now
+- ensure subdomain event fires after boot complete
+- handle existing account errors in email verification
+- remove hardcoded https protocol from avatar URL format constant
+- Correct context parameter in buildAuthCompleteURL call
+- use config.Secure instead of request scheme for HTTPS detection
+- missing imports
+- unused import
+- disable filter parameters from operation schema due to panic issue
+- add missing /api/auth/login route
+- add missing /api/auth/register route
+- correct string pointer handling in operation display infot>
+- remove unused import
+- replace ctx.Request().RemoteAddr with ctx.RealIP() for better IP detection
+- move API_KEY_SERVICE constant to core package
+- improve API key validation logic and add error metrics
+- remove redundant error check in ValidateAPIKey
+- add concrete DTOs for swagger documentation to fix generic type detection
+- add filtering and sorting to API keys list endpoint
+- use custom stringUUIDSchema for keyID path parameter
+- remove unused auth import
+- add missing auth import
+- remove default 200 response from OTP validate endpoint
+- pass mockUser to RegisterLoginTokenWithUser
+- map operation filter/sort fields to DB columns before querying
+- propagate CID decode errors from operation filter mapping
+
 ## 0.2.4
 
 ### Patch Changes
