@@ -26,8 +26,8 @@ require (
 	go.lumeweb.com/portal-middleware v0.3.5
 	go.lumeweb.com/portal-router v0.6.13
 	go.lumeweb.com/queryutil v0.3.15
-	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260123053442-479cd558a2fc
-	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260123053442-479cd558a2fc
+	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260526172636-658cb25ff6e4
+	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260526172636-658cb25ff6e4
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.50.0
 	golang.org/x/image v0.34.0
@@ -94,7 +94,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
-	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
