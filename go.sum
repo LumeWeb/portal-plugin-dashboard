@@ -828,10 +828,10 @@ go.lumeweb.com/portal-router v0.6.13 h1:WqBNN4naPuERAwLqjCwxpAhpvzBxom8w8KqdP+Eo
 go.lumeweb.com/portal-router v0.6.13/go.mod h1:4tb+XYa0GYiFVraMoossGgMBTN9z4U54v8SL+EOBvbs=
 go.lumeweb.com/queryutil v0.3.15 h1:R2l6GAAne8rCgh1rGy5HQ54zvs8JJw3gRLjhmkd8SHk=
 go.lumeweb.com/queryutil v0.3.15/go.mod h1:nLkIuXzugX8Ln24wsAbfTafvNmaTHLJhIUKWC1693G4=
-go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260606140504-280cab62aeb6 h1:rsQQJptqENg+STGcj7sbGhqKXN31Jl6EzTt/Y1/RSjc=
-go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260606140504-280cab62aeb6/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
-go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260606140504-280cab62aeb6 h1:hjBrSG1vtSW6hbCTfPA/J0XfOwZm7tyPE7mwh624dr4=
-go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260606140504-280cab62aeb6/go.mod h1:kBGprau52kN8MFDt8tN4G6D/mzOESayQIcS1tgrIuxY=
+go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260606162242-33afbf9a3873 h1:udRl0NVpO4t5U32wjXqzhxKrAvgBKp/TNQKYqgueFLQ=
+go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260606162242-33afbf9a3873/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
+go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260606162242-33afbf9a3873 h1:iTOX2gxDJKpLhvbWD235JBqee/DhUtrEwPSJ56dbSvo=
+go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260606162242-33afbf9a3873/go.mod h1:kBGprau52kN8MFDt8tN4G6D/mzOESayQIcS1tgrIuxY=
 go.mongodb.org/mongo-driver v1.11.4/go.mod h1:PTSz5yu21bkT/wXpkS7WR5f0ddqw5quethTUn9WM+2g=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.opencensus.io v0.22.0/go.mod h1:+kGneAE2xo2IficOXnaByMWTGM9T73dGwxeWcUqIpI8=
