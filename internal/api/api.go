@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	_ "image/gif"
@@ -50,6 +51,10 @@ const (
 	AuthCompletePath = "/api/auth/complete" // Path for authentication complete endpoint
 	RememberMeCookie = "remember_me"        // Cookie name for remember me flag
 )
+
+type brandConfig struct {
+	LogoURL string `json:"logoUrl"`
+}
 
 var _ core.API = (*API)(nil)
 
@@ -542,7 +547,12 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 		router.MustDefaultPublicFilesSetup(gRouter, pluginCfg.AppFolder)
 	} else {
 		// Using the new WebAppConfig helper with embedded assets
-		router.MustDefaultStaticSetup(gRouter, router.NewAppFilesystem(portal_dashboard.GetFS(), router.AppFilesystemConfig{Domain: a.Config().Config().Core.Domain}))
+		fsConfig := router.AppFilesystemConfig{Domain: a.Config().Config().Core.Domain}
+		if pluginCfg.LogoURL != "" {
+			brand, _ := json.Marshal(brandConfig{LogoURL: pluginCfg.LogoURL})
+			fsConfig.BrandJSON = string(brand)
+		}
+		router.MustDefaultStaticSetup(gRouter, router.NewAppFilesystem(portal_dashboard.GetFS(), fsConfig))
 	}
 
 	return nil

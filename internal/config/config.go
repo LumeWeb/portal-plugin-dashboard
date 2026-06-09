@@ -17,6 +17,7 @@ type APIConfig struct {
 	SocialLogin SocialLogin `config:"social_login"`
 	AppFolder   string      `config:"app_folder"`
 	Themes      Themes      `config:"themes"`
+	LogoURL     string      `config:"logo_url"`
 }
 
 func (a APIConfig) Schema() z.ZogSchema {
