@@ -8,8 +8,8 @@ import (
 var _ config.ConfigSchemaProvider = (*Branding)(nil)
 
 type Branding struct {
-	LogoURL    string `config:"logo_url" json:"logoUrl"`
-	FaviconURL string `config:"favicon_url" json:"faviconUrl"`
+	LogoURL    string `config:"logo_url" json:"logoUrl,omitempty"`
+	FaviconURL string `config:"favicon_url" json:"faviconUrl,omitempty"`
 }
 
 func (b Branding) Schema() z.ZogSchema {
