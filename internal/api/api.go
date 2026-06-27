@@ -52,10 +52,6 @@ const (
 	RememberMeCookie = "remember_me"        // Cookie name for remember me flag
 )
 
-type brandConfig struct {
-	LogoURL string `json:"logoUrl"`
-}
-
 var _ core.API = (*API)(nil)
 
 type API struct {
@@ -548,8 +544,8 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 	} else {
 		// Using the new WebAppConfig helper with embedded assets
 		fsConfig := router.AppFilesystemConfig{Domain: a.Config().Config().Core.Domain}
-		if pluginCfg.LogoURL != "" {
-			brand, _ := json.Marshal(brandConfig{LogoURL: pluginCfg.LogoURL})
+		if pluginCfg.Branding.LogoURL != "" || pluginCfg.Branding.FaviconURL != "" {
+			brand, _ := json.Marshal(pluginCfg.Branding)
 			fsConfig.BrandJSON = string(brand)
 		}
 		router.MustDefaultStaticSetup(gRouter, router.NewAppFilesystem(portal_dashboard.GetFS(), fsConfig))

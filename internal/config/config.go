@@ -17,14 +17,14 @@ type APIConfig struct {
 	SocialLogin SocialLogin `config:"social_login"`
 	AppFolder   string      `config:"app_folder"`
 	Themes      Themes      `config:"themes"`
-	LogoURL     string      `config:"logo_url"`
+	Branding    Branding    `config:"branding"`
 }
 
 func (a APIConfig) Schema() z.ZogSchema {
 	return z.Struct(z.Shape{
-		"Subdomain": z.String().Required(),
-		"AppFolder": z.String(),
-		"Themes": z.Slice(z.Struct(z.Shape{})).TestFunc(func(val any, ctx internals.Ctx) bool {
+		"Subdomain":   z.String().Required(),
+		"AppFolder":   z.String(),
+		"Themes":      z.Slice(z.Struct(z.Shape{})).TestFunc(func(val any, ctx internals.Ctx) bool {
 			def := false
 			for _, theme := range reflect.ValueOf(val).Elem().Interface().(Themes) {
 				if theme.Default {
@@ -36,6 +36,10 @@ func (a APIConfig) Schema() z.ZogSchema {
 				}
 			}
 			return true
+		}),
+		"Branding": z.Struct(z.Shape{
+			"LogoURL":    z.String(),
+			"FaviconURL": z.String(),
 		}),
 	})
 }
