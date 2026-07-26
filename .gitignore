@@ -24,3 +24,4 @@ node_modules
 pnpm-lock.yaml
 vendor/
 .aider*
+.worktrees/

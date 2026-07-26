@@ -12,6 +12,7 @@ import (
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/db/migrations"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/keyidentity"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	apiKeyService "go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	"go.lumeweb.com/portal/core"
@@ -34,6 +35,9 @@ func GetPluginInfo() core.PluginInfo {
 		ID:      internal.PLUGIN_NAME,
 		Version: build.GetInfo(),
 		Depends: []string{"core"},
+		KeyIdentityHandlers: []core.KeyIdentityHandlerRegistration{
+			keyidentity.EthereumHandlerRegistration(),
+		},
 		Meta: func(ctx core.Context, builder core.PortalMetaBuilder) error {
 			pluginCfg := ctx.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 
