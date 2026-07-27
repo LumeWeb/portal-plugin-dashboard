@@ -335,7 +335,10 @@ func TestEthereumHandler_Close_StopsReaper(t *stdtesting.T) {
 // REGRESSION: VerifyProof ignores metadata param — chain_id mismatch (Kody: critical)
 // Verify that VerifyProof rejects a proof where the signed message's chain_id
 // doesn't match the registered metadata's chain_id (cross-chain replay prevention).
-func TestEthereumHandler_VerifyProof_ChainIDMismatch(t *stdtesting.T) {
+// Chain_id is no longer enforced at verification — the same EVM address can
+// sign from any chain. This test verifies that a signature from a different
+// chain_id than the stored metadata still passes verification.
+func TestEthereumHandler_VerifyProof_ChainIDAgnostistic(t *stdtesting.T) {
 	ctx := testContext(t)
 	h := NewEthereumHandler()
 	store := caip122.NewMemoryChallengeStore()
@@ -350,15 +353,14 @@ func TestEthereumHandler_VerifyProof_ChainIDMismatch(t *stdtesting.T) {
 		t.Fatal(err)
 	}
 
-	// Create a real wallet so the signature is valid — the chain_id check
-	// now runs AFTER signature verification succeeds.
+	// Create a real wallet so the signature is valid
 	kp, err := secp256k1.GenerateSecp256k1KeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
 	key := kp.Address.String()
 
-	// Construct message with a DIFFERENT chain_id (eip155:137)
+	// Construct message with a DIFFERENT chain_id (eip155:137) than metadata
 	msg, err := caip122.FormatMessage(key, domain, nonce, "eip155:137", 5*time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -387,14 +389,11 @@ func TestEthereumHandler_VerifyProof_ChainIDMismatch(t *stdtesting.T) {
 		Signature: sig,
 	})
 
-	// Verify with metadata declaring eip155:1 — should fail because the
-	// signed message says eip155:137.
+	// Verify with metadata declaring eip155:1 — should succeed because
+	// chain_id is informational, not enforced.
 	err = h.VerifyProof(ctx, key, json.RawMessage(`{"chain_id":"eip155:1"}`), proof)
-	if err == nil {
-		t.Fatal("expected error for chain_id mismatch")
-	}
-	if !strings.Contains(err.Error(), "chain_id mismatch") {
-		t.Fatalf("expected chain_id mismatch error, got: %v", err)
+	if err != nil {
+		t.Fatalf("expected no error for cross-chain verification, got: %v", err)
 	}
 }
 
