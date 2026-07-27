@@ -224,8 +224,8 @@ func (h *EthereumHandler) VerifyProof(ctx core.Context, key string, metadata jso
 		return err
 	}
 
-	// Validate metadata and extract the expected chain_id.
-	expectedChainID, err := h.extractChainID(metadata)
+	// Validate metadata (ensures chain_id format is correct if present).
+	_, err = h.extractChainID(metadata)
 	if err != nil {
 		return err
 	}
@@ -234,15 +234,20 @@ func (h *EthereumHandler) VerifyProof(ctx core.Context, key string, metadata jso
 
 	challenge := caip122.NewChallengeService(h.getStore(), caip122.DefaultChallengeConfig(domain))
 
-	address, signedChainID, err := challenge.VerifyChallengeWithChain(ctx, payload.Message, payload.Signature)
+	address, _, err := challenge.VerifyChallengeWithChain(ctx, payload.Message, payload.Signature)
 	if err != nil {
 		return fmt.Errorf("ethereum: proof verification failed: %w", err)
 	}
 
-	// Validate chain_id AFTER verification to prevent cross-chain replay attacks.
-	if signedChainID != expectedChainID {
-		return fmt.Errorf("ethereum: chain_id mismatch (expected %s, got %s)", expectedChainID, signedChainID)
-	}
+	// NOTE: chain_id is not enforced as a match against stored metadata.
+	// Per CAIP-122 rationale: "SIWx should allow for authentication via
+	// blockchain wallet across non-blockchain applications regardless of
+	// which chain/wallet the user is using." Per EIP-4361, chain-id is
+	// REQUIRED in the message but only constrains ERC-1271 contract
+	// signature resolution — for EOA recovery (our use case), the
+	// signature is chain-agnostic. The signed chain_id remains in the
+	// message for user-facing anti-phishing and is stored in metadata
+	// as informational data.
 
 	if address != normalized {
 		return fmt.Errorf("ethereum: address mismatch (expected %s, recovered %s)", normalized, address)

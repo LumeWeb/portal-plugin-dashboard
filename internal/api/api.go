@@ -490,6 +490,9 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 	// Add key identity routes (challenge + verify)
 	routes = append(routes, a.buildKeyIdentityRoutes()...)
 
+	// Add key identity management routes (authenticated)
+	routes = append(routes, a.buildKeyIdentityManageRoutes(authMw, accessMw)...)
+
 	// Add account routes
 	routes = append(routes, a.buildAccountRoutes(authMw, accessMw)...)
 

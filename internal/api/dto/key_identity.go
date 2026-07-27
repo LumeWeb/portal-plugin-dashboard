@@ -103,3 +103,68 @@ func (r *KeyIdentityVerifyResponse) FromModel(model *KeyIdentityVerifyResponse) 
 	r.Otp = model.Otp
 	return nil
 }
+
+// --- Identity Management DTOs (authenticated) ---
+
+var (
+	_ httputil.DTOValidator                = (*KeyIdentityConnectVerifyRequest)(nil)
+	_ httputil.DTORequest[*KeyIdentityConnectVerifyRequest] = (*KeyIdentityConnectVerifyRequest)(nil)
+	_ httputil.DTOResponse[*KeyIdentityConnectVerifyResponse] = (*KeyIdentityConnectVerifyResponse)(nil)
+
+	_ httputil.DTOResponse[*KeyIdentityListResponse] = (*KeyIdentityListResponse)(nil)
+)
+
+// KeyIdentityConnectVerifyRequest is the request body for verifying a signed
+// challenge to link a new key identity to the authenticated user's account.
+type KeyIdentityConnectVerifyRequest struct {
+	KeyType   string              `json:"key_type"`
+	Key       string              `json:"key"`
+	Metadata  JSONRawMessageSchema `json:"metadata,omitempty"`
+	Message   string              `json:"message"`
+	Signature string              `json:"signature"`
+}
+
+func (r *KeyIdentityConnectVerifyRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"KeyType":   z.String().Required(),
+		"Key":        z.String().Required(),
+		"Message":    z.String().Required(),
+		"Signature":  z.String().Required(),
+	})
+}
+
+func (r *KeyIdentityConnectVerifyRequest) ToModel() (*KeyIdentityConnectVerifyRequest, error) {
+	return r, nil
+}
+
+// KeyIdentityConnectVerifyResponse is the response body for a successful
+// key identity connection.
+type KeyIdentityConnectVerifyResponse struct {
+	KeyType  string              `json:"key_type"`
+	Key      string              `json:"key"`
+	Metadata JSONRawMessageSchema `json:"metadata,omitempty"`
+}
+
+func (r *KeyIdentityConnectVerifyResponse) FromModel(model *KeyIdentityConnectVerifyResponse) error {
+	r.KeyType = model.KeyType
+	r.Key = model.Key
+	r.Metadata = model.Metadata
+	return nil
+}
+
+// KeyIdentityItem represents a single key identity in list responses.
+type KeyIdentityItem struct {
+	KeyType  string              `json:"key_type"`
+	Key      string              `json:"key"`
+	Metadata JSONRawMessageSchema `json:"metadata,omitempty"`
+}
+
+// KeyIdentityListResponse is the response body for listing key identities.
+type KeyIdentityListResponse struct {
+	Identities []KeyIdentityItem `json:"identities"`
+}
+
+func (r *KeyIdentityListResponse) FromModel(model *KeyIdentityListResponse) error {
+	r.Identities = model.Identities
+	return nil
+}
