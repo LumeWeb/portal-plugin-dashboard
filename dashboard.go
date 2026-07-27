@@ -37,6 +37,7 @@ func GetPluginInfo() core.PluginInfo {
 		Depends: []string{"core"},
 		KeyIdentityHandlers: []core.KeyIdentityHandlerRegistration{
 			keyidentity.EthereumHandlerRegistration(),
+			keyidentity.SolanaHandlerRegistration(),
 		},
 		Meta: func(ctx core.Context, builder core.PortalMetaBuilder) error {
 			pluginCfg := ctx.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)

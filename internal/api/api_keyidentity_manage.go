@@ -61,6 +61,8 @@ func (a *API) buildKeyIdentityManageRoutes(authMw echo.MiddlewareFunc, accessMw 
 			router.WithSwaggerOptions(
 				router.WithSummary("Disconnect Key Identity"),
 				router.WithDescription("Unlinks a key identity from the authenticated user's account."),
+				router.WithPathParam("type", "The key identity type (e.g., ethereum, solana)", "ethereum"),
+				router.WithPathParam("key", "The base58/hex-encoded public key to disconnect", ""),
 				router.WithSuccessResponse(http.StatusNoContent, "Key identity removed"),
 				router.WithErrorResponses(router.DefineSwaggerErrorResponses(
 					router.DefineSwaggerErrorResponse(http.StatusBadRequest, "Invalid key type or key format"),
