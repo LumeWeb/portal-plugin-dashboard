@@ -51,9 +51,9 @@ func (h *EthereumHandler) SetStore(store caip122.ChallengeStore) {
 		return
 	}
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	oldStore := h.store
 	h.store = store
-	h.mu.Unlock()
 	if closer, ok := oldStore.(io.Closer); ok {
 		_ = closer.Close()
 	}
