@@ -6,27 +6,23 @@ require (
 	github.com/Oudwins/zog v0.22.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0
 	github.com/aws/smithy-go v1.27.4
-	github.com/dchest/uniuri v1.2.0
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
-	github.com/hyperledger-firefly/signer v1.2.1
 	github.com/invopop/jsonschema v0.14.0
 	github.com/ipfs/go-cid v0.6.2
 	github.com/kolesa-team/go-webp v1.0.5
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/markbates/goth v1.82.0
-	github.com/mr-tron/base58 v1.3.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.24.1
-	github.com/relvacode/iso8601 v1.8.0
 	github.com/samber/lo v1.53.0
 	github.com/sethvargo/go-password v0.3.1
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/gswagger v0.20.12
 	go.lumeweb.com/httputil v0.5.6
-	go.lumeweb.com/portal v0.5.2-0.20260727130906-c632318fe632
+	go.lumeweb.com/portal v0.5.2-0.20260728203617-67e7b4f45488
 	go.lumeweb.com/portal-middleware v0.3.7
 	go.lumeweb.com/portal-router v0.7.6
 	go.lumeweb.com/queryutil v0.3.17
@@ -78,6 +74,7 @@ require (
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dchest/uniuri v1.2.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -114,6 +111,7 @@ require (
 	github.com/hbollon/go-edlib v1.7.0 // indirect
 	github.com/huandu/go-tls v1.0.1 // indirect
 	github.com/hyperledger-firefly/common v1.6.2 // indirect
+	github.com/hyperledger-firefly/signer v1.2.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.10.0 // indirect
@@ -143,6 +141,7 @@ require (
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
+	github.com/mr-tron/base58 v1.3.0 // indirect
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450 // indirect
 	github.com/multiformats/go-base32 v0.1.0 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
@@ -167,6 +166,7 @@ require (
 	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/quic-go/webtransport-go v0.11.1 // indirect
 	github.com/redis/go-redis/v9 v9.21.0 // indirect
+	github.com/relvacode/iso8601 v1.8.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect
@@ -217,7 +217,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/arch v0.24.0 // indirect
-	golang.org/x/exp v0.0.0-20260718201538-764159d718ef // indirect
+	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,9 +22,11 @@ import (
 
 // ensureEthereumHandlerRegistered registers the Ethereum key identity handler
 // in the core registry for tests. Must be called inside RunTestCase because
-// ResetState() clears the registry between tests.
+// ResetState() clears the registry between tests. Uses the production
+// registration function so the dashboardDomainResolver is exercised.
 func ensureEthereumHandlerRegistered() {
-	core.RegisterKeyIdentity("ethereum", keyidentity.NewEthereumHandler())
+	reg := keyidentity.EthereumHandlerRegistration()
+	core.RegisterKeyIdentity(reg.Type, reg.Handler)
 }
 
 func TestKeyIdentityChallenge_Success(t *testing.T) {
@@ -53,8 +56,33 @@ func TestKeyIdentityChallenge_Success(t *testing.T) {
 		assert.Nil(tb, err)
 		assert.NotEmpty(tb, resp.Message)
 		assert.NotEmpty(tb, resp.Nonce)
-		assert.Contains(tb, resp.Message, "example.com")
+		assert.Contains(tb, resp.Message, "account.example.com")
+		// Verify the dashboard domain (subdomain + core) is used, not the
+		// bare core domain. Every occurrence of "example.com" must be part
+		// of "account.example.com" — the bare core domain must not appear.
+		bareDomain := "example.com"
+		dashDomain := "account.example.com"
+		prefixLen := len(dashDomain) - len(bareDomain) // len("account.")
+		for _, i := range allIndices(resp.Message, bareDomain) {
+			if i < prefixLen || resp.Message[i-prefixLen:i+len(bareDomain)] != dashDomain {
+				tb.Fatalf("bare core domain %q found at offset %d, not part of %q\nmessage: %q", bareDomain, i, dashDomain, resp.Message)
+			}
+		}
 	})
+}
+
+// allIndices returns all start offsets of substr in s.
+func allIndices(s, substr string) []int {
+	var indices []int
+	for i := 0; ; i++ {
+		j := strings.Index(s[i:], substr)
+		if j < 0 {
+			break
+		}
+		indices = append(indices, i+j)
+		i += j + len(substr) - 1
+	}
+	return indices
 }
 
 func TestKeyIdentityChallenge_UnsupportedKeyType(t *testing.T) {
