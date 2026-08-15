@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
-	pluginDbMigrations "go.lumeweb.com/portal-plugin-dashboard/internal/db/migrations"
 	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
+	pluginDbMigrations "go.lumeweb.com/portal-plugin-dashboard/internal/db/migrations"
+	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/queryutil"
@@ -195,6 +195,32 @@ func TestAPIKeyService_GetAPIKeys_FilterByName(t *testing.T) {
 		require.NoError(tb, err)
 		err = apiKeyService.DeleteAPIKey(context.Background(), userID, key2.UUID.ToUUID())
 		require.NoError(tb, err)
+	})
+}
+
+func TestAPIKeyService_GetAPIKeys_GlobalSearch(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, apiKeyService)
+
+		userID := uint(1)
+		_, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Production Key")
+		require.NoError(tb, err)
+		_, err = apiKeyService.CreateAPIKey(context.Background(), userID, "Staging Key")
+		require.NoError(tb, err)
+
+		// api_keys_list's search arg arrives as a global 'q' filter. It must
+		// filter the name column rather than be silently dropped (regression:
+		// previously a nil search config made 'q' a no-op that returned every key).
+		filters := []queryutil.CrudFilter{queryutil.Equal("q", "production")}
+		sorts := []queryutil.Sort{}
+		pagination := queryutil.DefaultPagination
+
+		keys, total, err := apiKeyService.GetAPIKeys(context.Background(), userID, filters, sorts, pagination)
+		require.NoError(tb, err)
+		assert.Equal(tb, int64(1), total, "q search must match only 'Production Key'")
+		assert.Len(tb, keys, 1)
+		assert.Equal(tb, "Production Key", keys[0].Name)
 	})
 }
 

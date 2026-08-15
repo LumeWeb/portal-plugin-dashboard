@@ -14,6 +14,7 @@ import (
 	"go.lumeweb.com/portal/db"
 	"go.lumeweb.com/portal/db/types"
 	"go.lumeweb.com/queryutil"
+	"go.lumeweb.com/queryutil/filter"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -82,8 +83,11 @@ func (s *APIKeyServiceDefault) GetAPIKeys(ctx context.Context, userID uint, filt
 
 	query := s.DB().Model(&pluginDb.APIKey{}).Where(&pluginDb.APIKey{UserID: userID})
 
-	// Apply filters, sorts and pagination using queryutil helpers
-	query = queryutil.ApplyFilters(query, filters, nil)
+	// Apply filters, sorts and pagination using queryutil helpers. Wire up the
+	// global-search config so a 'q' search (api_keys_list's search arg) filters
+	// the name column; without it the builder silently drops 'q' as a no-op.
+	searchConfig := &filter.GlobalSearchConfig{SearchableColumns: []string{"name"}}
+	query = queryutil.ApplyFilters(query, filters, searchConfig)
 	query = queryutil.ApplySort(query, sorts)
 
 	if err := query.Count(&total).Error; err != nil {
