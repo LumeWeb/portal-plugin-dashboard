@@ -11,6 +11,7 @@ import (
 	"go.lumeweb.com/portal-middleware/auth/adapter"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
+	coreTesting "go.lumeweb.com/portal/core/testing"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -82,6 +83,7 @@ func TestProviderStore_LoadFromDB(t *testing.T) {
 	})
 
 	store := NewProviderStore()
+	store.SetContext(testContext(t))
 	require.NoError(t, store.LoadFromDB(db))
 
 	// Only the enabled provider is loaded.
@@ -108,6 +110,7 @@ func TestProviderStore_EvictThenSelfHeal(t *testing.T) {
 	})
 
 	store := NewProviderStore()
+	store.SetContext(testContext(t))
 	require.NoError(t, store.LoadFromDB(db))
 
 	// Trigger a reload so the miss-reload throttle deadline is advanced.
@@ -129,12 +132,21 @@ func TestProviderStore_EvictThenSelfHeal(t *testing.T) {
 	}, 3*time.Second, reloadCooldown)
 }
 
+// testContext returns a bare (unbooted) coreTesting context, whose component
+// logger the provider factory and store consume.
+func testContext(t *testing.T) coreTesting.TestContext {
+	testCtx, err := coreTesting.NewTestContext(t)
+	require.NoError(t, err)
+	t.Cleanup(testCtx.Teardown)
+	return testCtx
+}
+
 // newTestProvider builds a GenericOAuth2Provider pointing at mock endpoints.
-func newTestProvider(idKey, tokenURL, userURL string) *GenericOAuth2Provider {
+func newTestProvider(t *testing.T, idKey, tokenURL, userURL string) *GenericOAuth2Provider {
 	return NewGenericOAuth2Provider(
 		"test", "cid", "csecret", []string{"email"},
 		"https://auth.example/authorize", tokenURL, userURL, "http://cb",
-		"email", idKey, "name",
+		"email", idKey, "name", testContext(t).Logger(),
 	)
 }
 
@@ -154,7 +166,7 @@ func TestGenericOAuth2Provider_Exchange(t *testing.T) {
 	p := NewGenericOAuth2Provider(
 		"test", "cid", "csecret", []string{"email"},
 		"https://auth.example/authorize", tokenSrv.URL, userSrv.URL, "http://cb",
-		"email", "sub", "name",
+		"email", "sub", "name", testContext(t).Logger(),
 	)
 
 	user, err := p.Exchange(t.Context(), "code", "verifier")
@@ -182,7 +194,7 @@ func TestGenericOAuth2Provider_Exchange_MissingIDKey(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	p := newTestProvider(t, "sub", tokenSrv.URL, userSrv.URL)
 	_, err := p.Exchange(t.Context(), "code", "verifier")
 	assert.Error(t, err)
 }
@@ -199,7 +211,7 @@ func TestGenericOAuth2Provider_Exchange_MissingEmailKey(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	p := newTestProvider(t, "sub", tokenSrv.URL, userSrv.URL)
 	_, err := p.Exchange(t.Context(), "code", "verifier")
 	assert.Error(t, err)
 }
@@ -218,7 +230,7 @@ func TestGenericOAuth2Provider_Exchange_RejectsAggregateID(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	p := newTestProvider(t, "sub", tokenSrv.URL, userSrv.URL)
 	_, err := p.Exchange(t.Context(), "code", "verifier")
 	assert.Error(t, err)
 }
@@ -236,7 +248,7 @@ func TestGenericOAuth2Provider_Exchange_NumericID(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	p := newTestProvider(t, "sub", tokenSrv.URL, userSrv.URL)
 	user, err := p.Exchange(t.Context(), "code", "verifier")
 	require.NoError(t, err)
 	assert.Equal(t, "123456789012345678", user.ProviderUserID)
@@ -255,7 +267,7 @@ func TestGenericOAuth2Provider_Exchange_MissingEmailVerified(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	p := newTestProvider(t, "sub", tokenSrv.URL, userSrv.URL)
 	user, err := p.Exchange(t.Context(), "code", "verifier")
 	require.NoError(t, err)
 	assert.False(t, user.EmailVerified)
@@ -275,7 +287,7 @@ func TestGenericOAuth2Provider_Exchange_NonBooleanEmailVerifiedNotVerified(t *te
 	}))
 	defer tokenSrv.Close()
 
-	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	p := newTestProvider(t, "sub", tokenSrv.URL, userSrv.URL)
 	user, err := p.Exchange(t.Context(), "code", "verifier")
 	require.NoError(t, err)
 	assert.False(t, user.EmailVerified)
@@ -294,7 +306,7 @@ func TestGenericOAuth2Provider_Exchange_NumericEmailVerifiedNotVerified(t *testi
 	}))
 	defer tokenSrv.Close()
 
-	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	p := newTestProvider(t, "sub", tokenSrv.URL, userSrv.URL)
 	user, err := p.Exchange(t.Context(), "code", "verifier")
 	require.NoError(t, err)
 	assert.False(t, user.EmailVerified)
@@ -316,7 +328,7 @@ func TestGenericOAuth2Provider_Exchange_NestedKeys(t *testing.T) {
 	p := NewGenericOAuth2Provider(
 		"test", "cid", "csecret", []string{"email"},
 		"https://auth.example/authorize", tokenSrv.URL, userSrv.URL, "http://cb",
-		"data.email", "data.id", "name",
+		"data.email", "data.id", "name", testContext(t).Logger(),
 	)
 
 	user, err := p.Exchange(t.Context(), "code", "verifier")

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -23,6 +24,8 @@ import (
 	"go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/queryutil"
 	queryutilHttp "go.lumeweb.com/queryutil/http"
+	"go.uber.org/zap"
+	"golang.org/x/oauth2"
 )
 
 // socialConsentPageData carries the data rendered into the link-consent page:
@@ -285,6 +288,23 @@ func (a *API) socialAuthCallback(c echo.Context) error {
 
 	user, err := oauthProvider.Exchange(c.Request().Context(), req.Code, session.CodeVerifier)
 	if err != nil {
+		// The API error body is generic by design; log the sanitized failure
+		// reason here so ops can tell an invalid client secret
+		// (invalid_client), a host/scheme mismatch (redirect_uri_mismatch), or
+		// a replayed/bad verifier (invalid_grant) apart in logs.
+		//
+		// RetrieveError.Error() embeds the raw token-endpoint response body
+		// when Google's response omits the RFC 6749 error field, so only its
+		// structured, body-free fields are persisted at WARN; anything else in
+		// the chain (transport failures, userinfo claim errors) is PII-free.
+		reason := err.Error()
+		var re *oauth2.RetrieveError
+		if errors.As(err, &re) {
+			reason = fmt.Sprintf("%s: %s: %s", re.ErrorCode, re.ErrorDescription, re.ErrorURI)
+		}
+		ctx.Logger().Warn("social auth code exchange failed",
+			zap.String("provider", providerName),
+			zap.String("reason", reason))
 		apiErr := NewError(ErrKeyProviderExchangeFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}

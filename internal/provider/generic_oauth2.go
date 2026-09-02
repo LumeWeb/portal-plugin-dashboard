@@ -9,6 +9,8 @@ import (
 
 	"github.com/knadh/koanf/v2"
 	"github.com/samber/lo"
+	"go.lumeweb.com/portal/core"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
 
@@ -30,6 +32,7 @@ type GenericOAuth2Provider struct {
 	emailKey    string
 	idKey       string
 	nameKey     string
+	logger      *core.Logger
 }
 
 // NewGenericOAuth2Provider creates a config-driven OAuth2 provider.
@@ -39,6 +42,7 @@ func NewGenericOAuth2Provider(
 	scopes []string,
 	authURL, tokenURL, userURL, callbackURL string,
 	emailKey, idKey, nameKey string,
+	logger *core.Logger,
 ) *GenericOAuth2Provider {
 	return &GenericOAuth2Provider{
 		name: name,
@@ -52,6 +56,7 @@ func NewGenericOAuth2Provider(
 				TokenURL: tokenURL,
 			},
 		},
+		logger:   logger,
 		userURL:  userURL,
 		emailKey: lo.Ternary(emailKey != "", emailKey, "email"),
 		idKey:    lo.Ternary(idKey != "", idKey, "id"),
@@ -81,19 +86,34 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 		oauth2.SetAuthURLParam("code_verifier", codeVerifier),
 	)
 	if err != nil {
+		p.logger.Debug("oauth2 token exchange failed",
+			zap.String("provider", p.name),
+			zap.String("error", err.Error()))
 		return nil, fmt.Errorf("token exchange: %w", err)
 	}
+	p.logger.Debug("oauth2 token exchange succeeded",
+		zap.String("provider", p.name))
 
 	client := p.config.Client(ctx, token)
 	resp, err := client.Get(p.userURL)
 	if err != nil {
+		p.logger.Debug("oauth2 userinfo request failed",
+			zap.String("provider", p.name),
+			zap.String("error", err.Error()))
 		return nil, fmt.Errorf("userinfo request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		// The body may contain user PII (email, name), so it is confined to
+		// the DEBUG log and never embedded in the returned error, which the
+		// API handler persists at WARN.
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("userinfo returned %d: %s", resp.StatusCode, string(body))
+		p.logger.Debug("oauth2 userinfo request returned error status",
+			zap.String("provider", p.name),
+			zap.Int("status", resp.StatusCode),
+			zap.String("body", string(body)))
+		return nil, fmt.Errorf("userinfo returned %d", resp.StatusCode)
 	}
 
 	var raw map[string]any
@@ -112,10 +132,16 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 	// collapsing distinct users into a "<nil>" principal.
 	id, idOK := valueAt(k, p.idKey)
 	if !idOK || id == "" {
+		p.logger.Debug("oauth2 userinfo missing identity claim",
+			zap.String("provider", p.name),
+			zap.String("expected_key", p.idKey))
 		return nil, fmt.Errorf("userinfo missing id key %q", p.idKey)
 	}
 	email, emailOK := valueAt(k, p.emailKey)
 	if !emailOK || email == "" {
+		p.logger.Debug("oauth2 userinfo missing email claim",
+			zap.String("provider", p.name),
+			zap.String("expected_key", p.emailKey))
 		return nil, fmt.Errorf("userinfo missing email key %q", p.emailKey)
 	}
 
