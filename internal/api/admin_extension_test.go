@@ -305,7 +305,6 @@ func TestSocialAdminExtension_UpdateOmittedFieldsKeepSecret(t *testing.T) {
 		rec = adminRequest(tb, ctx, http.MethodPut, "/api/social/providers/"+itoa(created.ID),
 			[]byte(`{"display_name":"Google LLC"}`), token)
 		require.Equal(tb, http.StatusOK, rec.Code, rec.Body.String())
-		assert.Equal(tb, "Google LLC", created.DisplayName)
 		var updated dto.SocialProviderResponse
 		require.NoError(tb, json.Unmarshal(rec.Body.Bytes(), &updated))
 		assert.Equal(tb, "Google LLC", updated.DisplayName)
@@ -315,7 +314,7 @@ func TestSocialAdminExtension_UpdateOmittedFieldsKeepSecret(t *testing.T) {
 		assert.True(tb, updated.Enabled)
 
 		svc := core.GetService[pluginCore.SocialProviderService](ctx, pluginCore.SOCIAL_PROVIDER_SERVICE)
-		cfg, err := svc.Get(ctx.Request().Context(), created.ID)
+		cfg, err := svc.Get(ctx.GetContext(), created.ID)
 		require.NoError(tb, err)
 		assert.Equal(tb, secret, cfg.ClientSecret, "omitted client_secret must preserve stored secret")
 	}, adminTestOptions)
