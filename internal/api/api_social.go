@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -20,6 +19,9 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db/models"
+	"go.lumeweb.com/queryutil"
+	queryutilHttp "go.lumeweb.com/queryutil/http"
 )
 
 // publicProvider is the public metadata exposed for an enabled provider.
@@ -282,7 +284,8 @@ func (a *API) socialAuthCallback(c echo.Context) error {
 	return a.finishSocialLogin(ctx, providerName, user, session.ReturnURL)
 }
 
-// listSocialLinks returns the social accounts linked to the authenticated user.
+// listSocialLinks returns the social accounts linked to the authenticated
+// user, using the standard queryutil list API (filters/sorts/pagination).
 func (a *API) listSocialLinks(c echo.Context) error {
 	ctx := httputil.Context(c)
 
@@ -291,26 +294,22 @@ func (a *API) listSocialLinks(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	accounts, err := a.socialAuth.ListAccounts(ctx.Request().Context(), userId)
-	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			return ctx.Error(acctErr, acctErr.HttpStatus())
-		}
-		return ctx.Error(err, http.StatusInternalServerError)
-	}
-
-	links := make([]dto.SocialAccountResponse, 0, len(accounts))
-	for _, acct := range accounts {
-		links = append(links, dto.SocialAccountResponse{
-			Provider:       acct.Provider,
-			ProviderUserID: acct.ProviderUserID,
-			Email:          acct.Email,
-			CreatedAt:      acct.CreatedAt,
-		})
-	}
-
-	return ctx.JSON(http.StatusOK, links)
+	return queryutilHttp.ProcessListRequest(
+		c.Response(),
+		c.Request(),
+		"social_accounts",
+		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.SocialAccount, int64, error) {
+			return a.socialAuth.ListAccounts(ctx.Request().Context(), userId, filters, sorts, pagination)
+		},
+		func(acct *models.SocialAccount) dto.SocialAccountResponse {
+			return dto.SocialAccountResponse{
+				Provider:       acct.Provider,
+				ProviderUserID: acct.ProviderUserID,
+				Email:          acct.Email,
+				CreatedAt:      acct.CreatedAt,
+			}
+		},
+	)
 }
 
 // socialAuthLink initiates linking a provider to the authenticated user. It
@@ -528,11 +527,9 @@ func (a *API) socialConsentPage(c echo.Context) error {
 func (a *API) socialConsentSubmit(c echo.Context) error {
 	ctx := httputil.Context(c)
 
-	var body struct {
-		Approve bool `json:"approve"`
-	}
-	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
-		return ctx.Error(errors.New("invalid request body"), http.StatusBadRequest)
+	var req dto.SocialConsentRequest
+	if _, ok := httputil.DecodeAndValidateRequest[*dto.SocialConsentRequest, *dto.SocialConsentRequest](ctx, &req); !ok {
+		return nil // Error handled by DecodeAndValidateRequest
 	}
 
 	key, err := a.socialSessionKey()
@@ -550,8 +547,10 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 	// Single-use: the pending identity cannot be approved twice.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
 
-	if !body.Approve {
-		return c.JSON(http.StatusOK, dto.SocialConsentResponse{RedirectURI: "/"})
+	if !req.Approve {
+		responseModel := &dto.SocialConsentResponse{RedirectURI: "/"}
+		var responseDto dto.SocialConsentResponse
+		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
 	}
 
 	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), session.Email)
@@ -572,7 +571,9 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 		return a.socialError(ctx, err)
 	}
 
-	return c.JSON(http.StatusOK, dto.SocialConsentResponse{RedirectURI: redirectURI})
+	responseModel := &dto.SocialConsentResponse{RedirectURI: redirectURI}
+	var responseDto dto.SocialConsentResponse
+	return httputil.EncodeResponse(ctx, responseModel, &responseDto)
 }
 
 // providerDisplayName returns the user-facing name for a provider, falling back

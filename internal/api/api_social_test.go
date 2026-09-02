@@ -21,6 +21,7 @@ import (
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/portal/core/testing/mocks"
 	"go.lumeweb.com/portal/db/models"
+	"go.lumeweb.com/queryutil"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -262,7 +263,11 @@ func TestListSocialLinks(t *testing.T) {
 			ProviderUserID: "uid-1",
 			Email:          "u@example.com",
 		}
-		socialSvc.EXPECT().ListAccounts(mock.Anything, uint(5)).Return([]*models.SocialAccount{acct}, nil)
+		// ProcessListRequest passes parsed defaults (empty slices + default
+		// pagination), so match any queryutil args.
+		socialSvc.EXPECT().
+			ListAccounts(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return([]*models.SocialAccount{acct}, int64(1), nil)
 
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/api/account/auth/links", nil)
@@ -272,10 +277,12 @@ func TestListSocialLinks(t *testing.T) {
 
 		require.NoError(tb, api.listSocialLinks(echoCtx))
 		require.Equal(tb, http.StatusOK, w.Code)
-		var links []map[string]any
-		require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &links))
-		require.Len(tb, links, 1)
-		require.Equal(tb, "google", links[0]["provider"])
+		// ProcessListRequest returns the standard queryutil.Response envelope.
+		var resp queryutil.Response[[]map[string]any]
+		require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(tb, resp.Data, 1)
+		require.Equal(tb, int64(1), resp.Total)
+		require.Equal(tb, "google", resp.Data[0]["provider"])
 	}, socialTestOptions)
 }
 
