@@ -209,7 +209,9 @@ func (e *SocialAdminExtension) handleCreateProvider(c echo.Context) error {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	e.refreshProviderStore(reqCtx)
+	if err := e.refreshProviderStore(reqCtx); err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
 
 	var resp dto.SocialProviderResponse
 	resp.FromModel(config)
@@ -311,7 +313,9 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	e.refreshProviderStore(reqCtx)
+	if err := e.refreshProviderStore(reqCtx); err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
 
 	var resp dto.SocialProviderResponse
 	resp.FromModel(config)
@@ -341,7 +345,9 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 		return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
 	}
 
-	e.refreshProviderStore(reqCtx)
+	if err := e.refreshProviderStore(reqCtx); err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -376,7 +382,9 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	e.refreshProviderStore(reqCtx)
+	if err := e.refreshProviderStore(reqCtx); err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
 
 	var resp dto.SocialProviderResponse
 	resp.FromModel(config)
@@ -384,11 +392,14 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 }
 
 // refreshProviderStore reloads the in-memory provider cache so provider
-// changes take effect immediately.
-func (e *SocialAdminExtension) refreshProviderStore(_ context.Context) {
+// changes take effect immediately. It returns the reload error so callers can
+// fail the mutation rather than report success while the live cache is stale.
+func (e *SocialAdminExtension) refreshProviderStore(_ context.Context) error {
 	if err := e.providerStore.LoadFromDB(e.DB()); err != nil {
 		e.Logger().Error("failed to reload social providers", zap.Error(err))
+		return err
 	}
+	return nil
 }
 
 func parseIDParam(c echo.Context) (uint, error) {
