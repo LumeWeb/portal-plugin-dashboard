@@ -633,3 +633,120 @@ func consentSession(tb testing.TB, api *API, session provider.SocialAuthSession,
 	require.Len(tb, cookies, 1)
 	fn(cookies)
 }
+
+// The consent POST is served on the API subdomain; a same-origin approve from
+// that host must pass the CSRF guard (not 403 against the bare core domain).
+// Browsers always send Origin with a scheme, so the test uses a scheme'd URL
+// even though the resolver may return a bare host.
+func TestVerifySameOrigin_AllowsAPISubdomain(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		apiHost := api.http.APISubdomain(api.Name(), true)
+		require.NotEmpty(tb, apiHost)
+		// Sanity: the middleware target differs from the bare core domain, so
+		// this test actually exercises the subdomain path.
+		require.NotEqual(tb, api.Config().Config().Core.Domain, apiHost)
+
+		origin := "https://" + strings.TrimPrefix(strings.TrimPrefix(apiHost, "https://"), "http://")
+
+		called := false
+		handler := api.verifySameOrigin()(func(c echo.Context) error {
+			called = true
+			return nil
+		})
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", nil)
+		req.Header.Set("Origin", origin)
+		echoCtx := e.NewContext(req, httptest.NewRecorder())
+
+		require.NoError(tb, handler(echoCtx))
+		require.True(tb, called)
+	}, socialTestOptions)
+}
+
+func TestVerifySameOrigin_RejectsCrossOrigin(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		handler := api.verifySameOrigin()(func(c echo.Context) error { return nil })
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", nil)
+		req.Header.Set("Origin", "https://evil.example.net")
+		echoCtx := e.NewContext(req, httptest.NewRecorder())
+
+		err := handler(echoCtx)
+		require.Error(tb, err)
+		httpErr, ok := err.(*echo.HTTPError)
+		require.True(tb, ok)
+		require.Equal(tb, http.StatusForbidden, httpErr.Code)
+	}, socialTestOptions)
+}
+
+// A client that strips Origin (privacy mode/webview) still sets Sec-Fetch-Site;
+// a genuine same-origin fetch from the consent page must pass.
+func TestVerifySameOrigin_NoOriginButSameSiteFetchMetadata(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		called := false
+		handler := api.verifySameOrigin()(func(c echo.Context) error {
+			called = true
+			return nil
+		})
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", nil)
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		echoCtx := e.NewContext(req, httptest.NewRecorder())
+
+		require.NoError(tb, handler(echoCtx))
+		require.True(tb, called)
+	}, socialTestOptions)
+}
+
+// With no Origin and no fetch metadata, the request fails closed.
+func TestVerifySameOrigin_NoOriginNoFetchMetadataRejected(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		handler := api.verifySameOrigin()(func(c echo.Context) error { return nil })
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", nil)
+		echoCtx := e.NewContext(req, httptest.NewRecorder())
+
+		err := handler(echoCtx)
+		require.Error(tb, err)
+		httpErr, ok := err.(*echo.HTTPError)
+		require.True(tb, ok)
+		require.Equal(tb, http.StatusForbidden, httpErr.Code)
+	}, socialTestOptions)
+}
+
+// An opaque Origin ("null", sandboxed iframe) must be rejected even when
+// fetch metadata is absent.
+func TestVerifySameOrigin_NullOriginRejected(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		handler := api.verifySameOrigin()(func(c echo.Context) error { return nil })
+
+		for _, origin := range []string{"null", "http://null", ""} {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", nil)
+			if origin != "" {
+				req.Header.Set("Origin", origin)
+			}
+			echoCtx := e.NewContext(req, httptest.NewRecorder())
+
+			err := handler(echoCtx)
+			require.Error(tb, err, "origin %q should be rejected", origin)
+			httpErr, ok := err.(*echo.HTTPError)
+			require.True(tb, ok)
+			require.Equal(tb, http.StatusForbidden, httpErr.Code)
+		}
+	}, socialTestOptions)
+}

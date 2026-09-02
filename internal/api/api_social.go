@@ -591,36 +591,54 @@ func (a *API) providerDisplayName(ctx httputil.RequestContext, providerName stri
 
 // verifySameOrigin guards the consent POST against CSRF. The consent page
 // submits with a same-origin fetch carrying credentials, so a genuine approval
-// always has an Origin matching this host. A cross-site request cannot set the
-// Origin header to the victim's host.
+// always carries an Origin matching the host the page was served from — the
+// API subdomain (e.g. account.example.com), not the bare core domain.
+// A cross-site request cannot set the Origin header to the victim's host.
+//
+// When a client strips Origin (privacy modes, some webviews), it falls back to
+// the Sec-Fetch-Site fetch-metadata header set by the same browser engine: a
+// genuine fetch from the consent page is "same-origin", and "none" is a
+// direct, user-initiated request. Anything else (cross-site, same-site
+// sibling, opaque "null" origin, absent) fails closed.
 func (a *API) verifySameOrigin() echo.MiddlewareFunc {
+	// Resolve the API host once: the OAuth flow routes are served from the
+	// dashboard API subdomain (see provider/setup.go callbackURL).
+	apiHost := a.http.APISubdomain(a.Name(), true)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			origin := c.Request().Header.Get("Origin")
-			if origin != "" && !sameOriginHost(a.Config().Config().Core.Domain, origin) {
+			if origin := c.Request().Header.Get("Origin"); origin != "" {
+				if sameOriginHost(apiHost, origin) {
+					return next(c)
+				}
 				return echo.NewHTTPError(http.StatusForbidden, "cross-origin request rejected")
 			}
-			return next(c)
+			switch c.Request().Header.Get("Sec-Fetch-Site") {
+			case "same-origin", "none":
+				return next(c)
+			default:
+				return echo.NewHTTPError(http.StatusForbidden, "cross-origin request rejected")
+			}
 		}
 	}
 }
 
-// sameOriginHost reports whether origin matches the configured domain. The
-// Origin header is always absolute (scheme://host); the domain may not carry a
-// scheme. Scheme is compared only when both are present.
-func sameOriginHost(domain, origin string) bool {
+// sameOriginHost reports whether origin matches the expected host. The Origin
+// header is always absolute (scheme://host); the expected host may not carry a
+// scheme. Scheme is compared only when both are present; ports are ignored so
+// the check is purely by hostname.
+func sameOriginHost(expected, origin string) bool {
 	o, err := url.Parse(origin)
-	if err != nil || o.Host == "" {
+	if err != nil || o.Hostname() == "" {
 		return false
 	}
-	if strings.Contains(domain, "://") {
-		d, err := url.Parse(domain)
+	if strings.Contains(expected, "://") {
+		d, err := url.Parse(expected)
 		if err != nil {
 			return false
 		}
 		return d.Hostname() == o.Hostname()
 	}
-	return domain == o.Hostname()
+	return expected == o.Hostname()
 }
 
 // loginRedirectURI establishes a session for the user and returns the
