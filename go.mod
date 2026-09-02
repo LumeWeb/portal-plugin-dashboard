@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/ipfs/go-cid v0.6.2
+	github.com/knadh/koanf/v2 v2.3.6
 	github.com/kolesa-team/go-webp v1.0.5
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/multiformats/go-multihash v0.2.3
@@ -120,7 +121,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect
 	github.com/knadh/koanf v1.5.0 // indirect
-	github.com/knadh/koanf/v2 v2.3.6 // indirect
 	github.com/labstack/echo-contrib v0.17.4 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/looplab/fsm v1.0.3 // indirect

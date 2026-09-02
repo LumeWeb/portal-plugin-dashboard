@@ -132,6 +132,9 @@ func (a *API) socialAuthLogin(c echo.Context) error {
 
 	providerName := c.Param("provider")
 	returnUrl := req.ReturnURL
+	if returnUrl == "" {
+		returnUrl = "/"
+	}
 
 	if !a.isValidReturnURL(returnUrl) {
 		return ctx.Error(errors.New("invalid return URL"), http.StatusBadRequest)

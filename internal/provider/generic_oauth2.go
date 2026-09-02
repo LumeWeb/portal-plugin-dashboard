@@ -6,11 +6,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
+	"github.com/knadh/koanf/v2"
 	"github.com/samber/lo"
 	"golang.org/x/oauth2"
 )
+
+// mapProvider adapts a decoded userinfo map to koanf's Provider interface.
+type mapProvider map[string]any
+
+func (m mapProvider) Read() (map[string]any, error) { return m, nil }
+func (mapProvider) ReadBytes() ([]byte, error) {
+	return nil, fmt.Errorf("map provider only supports Read")
+}
 
 // GenericOAuth2Provider implements OAuthProvider using golang.org/x/oauth2
 // with config-driven endpoints and user-info field mapping.
@@ -85,10 +93,32 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 		return nil, fmt.Errorf("decode userinfo: %w", err)
 	}
 
+	k := koanf.New(".")
+	if err := k.Load(mapProvider(raw), nil); err != nil {
+		return nil, fmt.Errorf("load userinfo: %w", err)
+	}
+
+	// A missing or empty identity/email must reject the exchange rather than
+	// collapsing distinct users into a "<nil>" principal.
+	id, idOK := valueAt(k, p.idKey)
+	if !idOK || id == "" {
+		return nil, fmt.Errorf("userinfo missing id key %q", p.idKey)
+	}
+	email, emailOK := valueAt(k, p.emailKey)
+	if !emailOK || email == "" {
+		return nil, fmt.Errorf("userinfo missing email key %q", p.emailKey)
+	}
+
+	// Name is optional; keep it empty when the provider omits it.
+	var name string
+	if n, ok := valueAt(k, p.nameKey); ok {
+		name = n
+	}
+
 	user := &OAuth2User{
-		ProviderUserID: fmt.Sprintf("%v", getString(raw, p.idKey)),
-		Email:          fmt.Sprintf("%v", getString(raw, p.emailKey)),
-		Name:           fmt.Sprintf("%v", getString(raw, p.nameKey)),
+		ProviderUserID: id,
+		Email:          email,
+		Name:           name,
 	}
 
 	if v, ok := raw["email_verified"]; ok {
@@ -100,19 +130,19 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 	return user, nil
 }
 
-// getString navigates a nested JSON map using dot-notation (e.g. "data.id").
-func getString(data map[string]any, key string) any {
-	parts := strings.Split(key, ".")
-	var current any = data
-
-	for _, part := range parts {
-		switch v := current.(type) {
-		case map[string]any:
-			current = v[part]
-		default:
-			return ""
-		}
+// valueAt fetches a dot-notation key (e.g. "data.id") via koanf and reports
+// whether it was present and non-nil, so callers never receive a
+// "<nil>"-formatted value.
+func valueAt(k *koanf.Koanf, key string) (string, bool) {
+	if !k.Exists(key) {
+		return "", false
 	}
-
-	return current
+	v := k.Get(key)
+	if v == nil {
+		return "", false
+	}
+	if s, ok := v.(string); ok {
+		return s, true
+	}
+	return fmt.Sprintf("%v", v), true
 }

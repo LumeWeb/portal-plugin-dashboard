@@ -318,3 +318,37 @@ func TestSocialAuthCallback_LinkFlow(t *testing.T) {
 		require.Equal(tb, "/settings", w.Header().Get("Location"))
 	}, socialTestOptions)
 }
+
+// Login without a ?return query param must not 400; it defaults to "/".
+func TestSocialAuthLogin_DefaultsReturnURL(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+		}))
+		defer tokenSrv.Close()
+		userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sub":"uid-1","email":"u@example.com"}`))
+		}))
+		defer userSrv.Close()
+
+		store := provider.Provider()
+		store.SetContext(ctx)
+		require.NoError(tb, store.LoadFromDB(seedProviderDB(tb, tokenSrv.URL, userSrv.URL)))
+		api.providerStore = store
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google", nil)
+		w := httptest.NewRecorder()
+		echoCtx := e.NewContext(req, w)
+		echoCtx.SetParamNames("provider")
+		echoCtx.SetParamValues("google")
+
+		require.NoError(tb, api.socialAuthLogin(echoCtx))
+		require.Equal(tb, http.StatusFound, w.Code)
+		require.Contains(tb, w.Header().Get("Location"), "https://")
+	}, socialTestOptions)
+}

@@ -23,7 +23,7 @@ type fakeCookieSetter struct{}
 func (fakeCookieSetter) SetJWTCookie(_ http.ResponseWriter, _ string, _ jwt.Purpose, _ time.Duration, _ ...jwt.Option) (string, error) {
 	return "", nil
 }
-func (fakeCookieSetter) ClearJWTCookie(_ http.ResponseWriter) {}
+func (fakeCookieSetter) ClearJWTCookie(_ http.ResponseWriter)                                   {}
 func (fakeCookieSetter) EchoAuthCookie(_ http.ResponseWriter, _ *http.Request, _ ...jwt.Option) {}
 func (fakeCookieSetter) SetCookie(w http.ResponseWriter, name, value, domain, path string, expiry time.Time, secure, httpOnly bool, sameSite http.SameSite) {
 	http.SetCookie(w, &http.Cookie{
@@ -59,15 +59,15 @@ func TestProviderStore_LoadFromDB(t *testing.T) {
 	db := newTestDB(t)
 
 	seedProvider(t, db, &pluginDb.SocialProviderConfig{
-		ProviderID:  "google",
-		DisplayName: "Google",
-		ClientID:    "c1",
+		ProviderID:   "google",
+		DisplayName:  "Google",
+		ClientID:     "c1",
 		ClientSecret: "s1",
-		AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
-		TokenURL:    "https://oauth2.googleapis.com/token",
-		UserURL:     "https://openidconnect.googleapis.com/v1/userinfo",
-		Enabled:     true,
-		OrderIndex:  1,
+		AuthURL:      "https://accounts.google.com/o/oauth2/v2/auth",
+		TokenURL:     "https://oauth2.googleapis.com/token",
+		UserURL:      "https://openidconnect.googleapis.com/v1/userinfo",
+		Enabled:      true,
+		OrderIndex:   1,
 	})
 	seedProvider(t, db, &pluginDb.SocialProviderConfig{
 		ProviderID:   "github",
@@ -93,6 +93,15 @@ func TestProviderStore_LoadFromDB(t *testing.T) {
 
 	_, err = store.GetProvider("github")
 	assert.Error(t, err)
+}
+
+// newTestProvider builds a GenericOAuth2Provider pointing at mock endpoints.
+func newTestProvider(idKey, tokenURL, userURL string) *GenericOAuth2Provider {
+	return NewGenericOAuth2Provider(
+		"test", "cid", "csecret", []string{"email"},
+		"https://auth.example/authorize", tokenURL, userURL, "http://cb",
+		"email", idKey, "name",
+	)
 }
 
 func TestGenericOAuth2Provider_Exchange(t *testing.T) {
@@ -125,6 +134,65 @@ func TestGenericOAuth2Provider_Exchange(t *testing.T) {
 	url := p.AuthCodeURL("state", "challenge")
 	assert.Contains(t, url, "code_challenge=challenge")
 	assert.Contains(t, url, "code_challenge_method=S256")
+}
+
+func TestGenericOAuth2Provider_Exchange_MissingIDKey(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"email":"u@example.com"}`)) // no "sub" / id key
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	_, err := p.Exchange(t.Context(), "code", "verifier")
+	assert.Error(t, err)
+}
+
+func TestGenericOAuth2Provider_Exchange_MissingEmailKey(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sub":"abc123"}`)) // no email
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	_, err := p.Exchange(t.Context(), "code", "verifier")
+	assert.Error(t, err)
+}
+
+// Nesting is resolved via dot-notation (koanf), e.g. id at "data.id".
+func TestGenericOAuth2Provider_Exchange_NestedKeys(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"nested-1","email":"n@example.com"}}`))
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := NewGenericOAuth2Provider(
+		"test", "cid", "csecret", []string{"email"},
+		"https://auth.example/authorize", tokenSrv.URL, userSrv.URL, "http://cb",
+		"data.email", "data.id", "name",
+	)
+
+	user, err := p.Exchange(t.Context(), "code", "verifier")
+	require.NoError(t, err)
+	assert.Equal(t, "nested-1", user.ProviderUserID)
+	assert.Equal(t, "n@example.com", user.Email)
 }
 
 func TestSessionRoundTrip(t *testing.T) {
