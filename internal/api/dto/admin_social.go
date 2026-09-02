@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"errors"
 	"time"
 
 	"go.lumeweb.com/httputil"
@@ -9,9 +10,9 @@ import (
 
 var _ httputil.DTORequest[*SocialProviderRequest] = (*SocialProviderRequest)(nil)
 
-// SocialProviderRequest is the admin payload for creating or updating a social
-// login provider. ClientSecret is optional on update; an empty value keeps the
-// existing secret.
+// SocialProviderRequest is the admin payload for creating a social login
+// provider. Updates use SocialProviderUpdateRequest, whose patch semantics do
+// not require re-sending the secret.
 type SocialProviderRequest struct {
 	ProviderID   string   `json:"provider_id"`
 	DisplayName  string   `json:"display_name"`
@@ -31,6 +32,94 @@ type SocialProviderRequest struct {
 // ToModel implements httputil.DTORequest, returning the request unchanged.
 func (r *SocialProviderRequest) ToModel() (*SocialProviderRequest, error) {
 	return r, nil
+}
+
+// SocialProviderUpdateRequest is the admin payload for updating a social login
+// provider. All fields are pointers so the API can distinguish "omitted" from
+// "explicitly set": nil means leave the stored value unchanged, a non-nil
+// value is applied. This gives callers true patch semantics even though the
+// route is a PUT — the API never returns ClientSecret, so a full-replace
+// contract would force callers to re-enter the secret on every edit.
+//
+// ClientSecret follows the same nil-means-keep rule, but an explicit empty
+// string is rejected: clearing a secret would permanently break the provider,
+// and since secrets are never returned there is no way to restore it.
+type SocialProviderUpdateRequest struct {
+	ProviderID   *string   `json:"provider_id,omitempty"`
+	DisplayName  *string   `json:"display_name,omitempty"`
+	ClientID     *string   `json:"client_id,omitempty"`
+	ClientSecret *string   `json:"client_secret,omitempty"`
+	Scopes       *[]string `json:"scopes,omitempty"`
+	AuthURL      *string   `json:"auth_url,omitempty"`
+	TokenURL     *string   `json:"token_url,omitempty"`
+	UserURL      *string   `json:"user_url,omitempty"`
+	UserIDKey    *string   `json:"user_id_key,omitempty"`
+	UserEmailKey *string   `json:"user_email_key,omitempty"`
+	UserNameKey  *string   `json:"user_name_key,omitempty"`
+	Enabled      *bool     `json:"enabled,omitempty"`
+	OrderIndex   *int      `json:"order_index,omitempty"`
+}
+
+// ToModel implements httputil.DTORequest, returning the request unchanged.
+func (r *SocialProviderUpdateRequest) ToModel() (*SocialProviderUpdateRequest, error) {
+	return r, nil
+}
+
+// Apply merges the update request onto an existing provider config using patch
+// semantics: every non-nil field overwrites the config value, nil fields are
+// left untouched. Scopes follow the same rule, with a non-nil empty slice
+// clearing all scopes. It returns an error for values that would leave the
+// provider unusable (an empty ClientSecret).
+func (r *SocialProviderUpdateRequest) Apply(cfg *pluginDb.SocialProviderConfig) error {
+	if r.ClientSecret != nil && *r.ClientSecret == "" {
+		return errors.New("client_secret cannot be cleared")
+	}
+	if r.ProviderID != nil && *r.ProviderID == "" {
+		return errors.New("provider_id cannot be empty")
+	}
+	if r.ClientID != nil && *r.ClientID == "" {
+		return errors.New("client_id cannot be empty")
+	}
+	if r.ProviderID != nil {
+		cfg.ProviderID = *r.ProviderID
+	}
+	if r.DisplayName != nil {
+		cfg.DisplayName = *r.DisplayName
+	}
+	if r.ClientID != nil {
+		cfg.ClientID = *r.ClientID
+	}
+	if r.ClientSecret != nil {
+		cfg.ClientSecret = *r.ClientSecret
+	}
+	if r.AuthURL != nil {
+		cfg.AuthURL = *r.AuthURL
+	}
+	if r.TokenURL != nil {
+		cfg.TokenURL = *r.TokenURL
+	}
+	if r.UserURL != nil {
+		cfg.UserURL = *r.UserURL
+	}
+	if r.UserIDKey != nil {
+		cfg.UserIDKey = *r.UserIDKey
+	}
+	if r.UserEmailKey != nil {
+		cfg.UserEmailKey = *r.UserEmailKey
+	}
+	if r.UserNameKey != nil {
+		cfg.UserNameKey = *r.UserNameKey
+	}
+	if r.Enabled != nil {
+		cfg.Enabled = *r.Enabled
+	}
+	if r.OrderIndex != nil {
+		cfg.OrderIndex = *r.OrderIndex
+	}
+	if r.Scopes != nil {
+		return cfg.SetScopes(*r.Scopes)
+	}
+	return nil
 }
 
 // SocialProviderResponse is the admin response for a social login provider.

@@ -277,3 +277,101 @@ func TestSocialAdminExtension_AdminRoutesDeclareAdminRole(t *testing.T) {
 		}
 	}, adminTestOptions)
 }
+
+// Omitted fields on PUT are left unchanged, so a client can edit a provider
+// without re-supplying the client secret (which the API never returns).
+func TestSocialAdminExtension_UpdateOmittedFieldsKeepSecret(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		setupAdminDB(tb, ctx)
+		token := setupAdminAuth(tb, ctx, 1)
+
+		const secret = "kept-secret-value"
+		createBody := []byte(`{
+			"provider_id":"google",
+			"display_name":"Google",
+			"client_id":"cli-1",
+			"client_secret":"` + secret + `",
+			"scopes":["email"],
+			"auth_url":"https://accounts.google.com/o/oauth2/v2/auth",
+			"enabled":true
+		}`)
+		rec := adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", createBody, token)
+		require.Equal(tb, http.StatusCreated, rec.Code, rec.Body.String())
+		var created dto.SocialProviderResponse
+		require.NoError(tb, json.Unmarshal(rec.Body.Bytes(), &created))
+
+		// Update only the display name; everything else (including the secret
+		// the API cannot return) must be preserved.
+		rec = adminRequest(tb, ctx, http.MethodPut, "/api/social/providers/"+itoa(created.ID),
+			[]byte(`{"display_name":"Google LLC"}`), token)
+		require.Equal(tb, http.StatusOK, rec.Code, rec.Body.String())
+		var updated dto.SocialProviderResponse
+		require.NoError(tb, json.Unmarshal(rec.Body.Bytes(), &updated))
+		assert.Equal(tb, "Google LLC", updated.DisplayName)
+		assert.Equal(tb, "cli-1", updated.ClientID)
+		assert.Equal(tb, []string{"email"}, updated.Scopes)
+		assert.Equal(tb, "https://accounts.google.com/o/oauth2/v2/auth", updated.AuthURL)
+		assert.True(tb, updated.Enabled)
+
+		svc := core.GetService[pluginCore.SocialProviderService](ctx, pluginCore.SOCIAL_PROVIDER_SERVICE)
+		cfg, err := svc.Get(ctx.GetContext(), created.ID)
+		require.NoError(tb, err)
+		assert.Equal(tb, secret, cfg.ClientSecret, "omitted client_secret must preserve stored secret")
+	}, adminTestOptions)
+}
+
+// An explicitly empty client_secret on update is rejected: secrets are never
+// returned, so "clear" would permanently break the provider with no way back.
+func TestSocialAdminExtension_UpdateRejectsEmptySecret(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		setupAdminDB(tb, ctx)
+		token := setupAdminAuth(tb, ctx, 1)
+
+		createBody := []byte(`{
+			"provider_id":"google",
+			"client_id":"cli-1",
+			"client_secret":"sec"
+		}`)
+		rec := adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", createBody, token)
+		require.Equal(tb, http.StatusCreated, rec.Code, rec.Body.String())
+		var created dto.SocialProviderResponse
+		require.NoError(tb, json.Unmarshal(rec.Body.Bytes(), &created))
+
+		rec = adminRequest(tb, ctx, http.MethodPut, "/api/social/providers/"+itoa(created.ID),
+			[]byte(`{"client_secret":""}`), token)
+		require.Equal(tb, http.StatusBadRequest, rec.Code, rec.Body.String())
+	}, adminTestOptions)
+}
+
+// Non-nil fields are applied even when clearing optional values, and nil
+// fields stay untouched.
+func TestSocialAdminExtension_UpdateAppliesExplicitValues(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		setupAdminDB(tb, ctx)
+		token := setupAdminAuth(tb, ctx, 1)
+
+		createBody := []byte(`{
+			"provider_id":"google",
+			"client_id":"cli-1",
+			"client_secret":"sec",
+			"user_id_key":"sub",
+			"scopes":["email","profile"],
+			"order_index":3
+		}`)
+		rec := adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", createBody, token)
+		require.Equal(tb, http.StatusCreated, rec.Code, rec.Body.String())
+		var created dto.SocialProviderResponse
+		require.NoError(tb, json.Unmarshal(rec.Body.Bytes(), &created))
+
+		// Clear user_id_key and shrink scopes; leave everything else out.
+		rec = adminRequest(tb, ctx, http.MethodPut, "/api/social/providers/"+itoa(created.ID),
+			[]byte(`{"user_id_key":"","scopes":[]}`), token)
+		require.Equal(tb, http.StatusOK, rec.Code, rec.Body.String())
+		var updated dto.SocialProviderResponse
+		require.NoError(tb, json.Unmarshal(rec.Body.Bytes(), &updated))
+		assert.Empty(tb, updated.UserIDKey)
+		assert.Empty(tb, updated.Scopes)
+		assert.Equal(tb, 3, updated.OrderIndex, "omitted order_index must be unchanged")
+		assert.Equal(tb, "cli-1", updated.ClientID, "omitted client_id must be unchanged")
+	}, adminTestOptions)
+}
