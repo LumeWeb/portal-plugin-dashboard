@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -195,27 +194,32 @@ func (a *API) socialAuthLogin(c echo.Context) error {
 	}
 
 	if !a.isValidReturnURL(returnUrl) {
-		return ctx.Error(errors.New("invalid return URL"), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidReturnURL, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	oauthProvider, err := a.providerStore.GetProvider(providerName)
 	if err != nil {
-		return ctx.Error(err, http.StatusBadRequest)
+		apiErr := NewError(ErrKeyProviderNotEnabled, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	key, err := a.socialSessionKey()
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	codeVerifier, err := generateRandomString(32)
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	state, err := generateRandomString(16)
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	session := &provider.SocialAuthSession{
@@ -225,7 +229,8 @@ func (a *API) socialAuthLogin(c echo.Context) error {
 	}
 
 	if err := provider.SaveSession(c.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	authURL := oauthProvider.AuthCodeURL(state, generateCodeChallengeS256(codeVerifier))
@@ -244,37 +249,44 @@ func (a *API) socialAuthCallback(c echo.Context) error {
 
 	key, err := a.socialSessionKey()
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	session, err := provider.GetSession(c.Request(), key)
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	// The session is single-use; clear it regardless of the outcome below.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
 
 	if req.State == "" || req.State != session.State {
-		return ctx.Error(errors.New("invalid or mismatched state parameter"), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidState, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if req.Error != "" {
-		return ctx.Error(fmt.Errorf("provider returned error: %s", req.Error), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyProviderError, nil, req.Error)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if req.Code == "" {
-		return ctx.Error(errors.New("missing authorization code"), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyMissingAuthCode, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	oauthProvider, err := a.providerStore.GetProvider(providerName)
 	if err != nil {
-		return ctx.Error(err, http.StatusBadRequest)
+		apiErr := NewError(ErrKeyProviderNotEnabled, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	user, err := oauthProvider.Exchange(c.Request().Context(), req.Code, session.CodeVerifier)
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderExchangeFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if session.Mode == provider.SessionModeLink {
@@ -329,7 +341,8 @@ func (a *API) socialAuthLink(c echo.Context) error {
 		returnUrl = "/"
 	}
 	if !a.isValidReturnURL(returnUrl) {
-		return ctx.Error(errors.New("invalid return URL"), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidReturnURL, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	userId, err := mcontext.GetUserID(ctx.Context)
@@ -339,22 +352,26 @@ func (a *API) socialAuthLink(c echo.Context) error {
 
 	oauthProvider, err := a.providerStore.GetProvider(providerName)
 	if err != nil {
-		return ctx.Error(err, http.StatusBadRequest)
+		apiErr := NewError(ErrKeyProviderNotEnabled, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	key, err := a.socialSessionKey()
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	codeVerifier, err := generateRandomString(32)
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	state, err := generateRandomString(16)
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	session := &provider.SocialAuthSession{
@@ -366,7 +383,8 @@ func (a *API) socialAuthLink(c echo.Context) error {
 	}
 
 	if err := provider.SaveSession(c.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	authURL := oauthProvider.AuthCodeURL(state, generateCodeChallengeS256(codeVerifier))
@@ -377,7 +395,8 @@ func (a *API) socialAuthLink(c echo.Context) error {
 // link session, then redirects back to the return URL.
 func (a *API) completeSocialLink(ctx httputil.RequestContext, providerName string, session *provider.SocialAuthSession, user *provider.OAuth2User) error {
 	if session.UserID == 0 {
-		return ctx.Error(errors.New("invalid link session"), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidLinkSession, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), session.UserID, providerName, user.ProviderUserID, user.Email); err != nil {
@@ -469,7 +488,7 @@ func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string
 
 	key, err := a.socialSessionKey()
 	if err != nil {
-		return false, ctx.Error(err, http.StatusInternalServerError)
+		return false, a.writeInternalError(ctx, err)
 	}
 
 	session := &provider.SocialAuthSession{
@@ -480,7 +499,7 @@ func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string
 		Email:          user.Email,
 	}
 	if err := provider.SaveSession(ctx.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
-		return false, ctx.Error(err, http.StatusInternalServerError)
+		return false, a.writeInternalError(ctx, err)
 	}
 
 	http.Redirect(ctx.Response(), ctx.Request(), socialConsentPath(providerName), http.StatusFound)
@@ -496,7 +515,8 @@ func (a *API) socialConsentPage(c echo.Context) error {
 
 	key, err := a.socialSessionKey()
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 	session, err := provider.GetSession(c.Request(), key)
 	if err != nil || session.Mode != provider.SessionModeConsentLink ||
@@ -534,7 +554,8 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 
 	key, err := a.socialSessionKey()
 	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 	session, err := provider.GetSession(c.Request(), key)
 	if err != nil || session.Mode != provider.SessionModeConsentLink ||
@@ -542,7 +563,8 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 		// Expired or forged consent: clear whatever cookie is present and send
 		// the user home rather than linking anything.
 		provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
-		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
+		apiErr := NewError(ErrKeyInvalidConsentSession, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 	// Single-use: the pending identity cannot be approved twice.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
@@ -555,7 +577,8 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 
 	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), session.Email)
 	if err != nil || !exists {
-		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
+		apiErr := NewError(ErrKeyInvalidConsentSession, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), existing.ID, session.ProviderName, session.ProviderUserID, session.Email); err != nil {
@@ -680,6 +703,12 @@ func (a *API) socialError(ctx httputil.RequestContext, err error) error {
 	return ctx.Error(err, http.StatusInternalServerError)
 }
 
+// writeInternalError writes an internal-error response in this namespace.
+func (a *API) writeInternalError(ctx httputil.RequestContext, err error) error {
+	apiErr := NewError(ErrKeyInternalError, err)
+	return ctx.Error(apiErr, apiErr.HttpStatus())
+}
+
 func (a *API) socialAuthLogout(c echo.Context) error {
 	ctx := httputil.Context(c)
 
@@ -692,13 +721,17 @@ func (a *API) socialAuthLogout(c echo.Context) error {
 // listPublicProviders returns enabled social login providers for the login
 // page. Only public metadata is exposed; secrets are never returned.
 func (a *API) listPublicProviders(c echo.Context) error {
+	ctx := httputil.Context(c)
+
 	if a.socialProvider == nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list providers"})
+		apiErr := NewError(ErrKeyProviderListFailed, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	configs, err := a.socialProvider.ListEnabled(httputil.Context(c).Request().Context())
+	configs, err := a.socialProvider.ListEnabled(ctx.Request().Context())
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list providers"})
+		apiErr := NewError(ErrKeyProviderListFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	providers := make([]publicProvider, 0, len(configs))

@@ -180,7 +180,8 @@ func (e *SocialAdminExtension) handleCreateProvider(c echo.Context) error {
 	}
 
 	if req.ProviderID == "" || req.ClientID == "" || req.ClientSecret == "" {
-		return ctx.Error(errors.New("provider_id, client_id and client_secret are required"), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidRequest, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	config := &pluginDb.SocialProviderConfig{
@@ -203,10 +204,12 @@ func (e *SocialAdminExtension) handleCreateProvider(c echo.Context) error {
 
 	if err := e.socialProvider.Create(reqCtx, config); err != nil {
 		if db.IsDuplicateKeyError(err) {
-			return ctx.Error(errors.New("provider_id already exists"), http.StatusConflict)
+			apiErr := NewError(ErrKeyProviderDuplicate, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
 		e.Logger().Error("failed to create social provider", zap.Error(err))
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderCreateFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	var resp dto.SocialProviderResponse
@@ -227,15 +230,18 @@ func (e *SocialAdminExtension) handleGetProvider(c echo.Context) error {
 
 	id, err := parseIDParam(c)
 	if err != nil {
-		return ctx.Error(err, http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidRequest, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	config, err := e.socialProvider.Get(reqCtx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
+			apiErr := NewError(ErrKeyProviderNotFound, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderFetchFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	var resp dto.SocialProviderResponse
@@ -249,7 +255,8 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 
 	id, err := parseIDParam(c)
 	if err != nil {
-		return ctx.Error(err, http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidRequest, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	var req dto.SocialProviderRequest
@@ -261,9 +268,11 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 	config, err := e.socialProvider.Get(reqCtx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
+			apiErr := NewError(ErrKeyProviderNotFound, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderFetchFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if req.ProviderID != "" {
@@ -310,10 +319,12 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 
 	if err := e.socialProvider.Update(reqCtx, config); err != nil {
 		if db.IsDuplicateKeyError(err) {
-			return ctx.Error(errors.New("provider_id already exists"), http.StatusConflict)
+			apiErr := NewError(ErrKeyProviderDuplicate, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
 		e.Logger().Error("failed to update social provider", zap.Error(err))
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderUpdateFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	var resp dto.SocialProviderResponse
@@ -331,7 +342,8 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 
 	id, err := parseIDParam(c)
 	if err != nil {
-		return ctx.Error(err, http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidRequest, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	// Hard-delete: provider config is ephemeral admin state with no audit or
@@ -342,15 +354,18 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 	rows, err := e.socialProvider.Delete(reqCtx, id)
 	if err != nil {
 		e.Logger().Error("failed to delete social provider", zap.Error(err))
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderDeleteFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 	if rows == 0 {
-		return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
+		apiErr := NewError(ErrKeyProviderNotFound, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if err := e.refreshProviderStore(reqCtx); err != nil {
 		// Row is gone; only the in-memory cache is stale.
-		return ctx.JSON(http.StatusAccepted, map[string]string{"error": "provider deleted but live cache reload failed"})
+		cacheErr := NewError(ErrKeyProviderCacheReload, err)
+		return ctx.JSON(http.StatusAccepted, cacheErr)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -369,21 +384,25 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 
 	id, err := parseIDParam(c)
 	if err != nil {
-		return ctx.Error(err, http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidRequest, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	config, err := e.socialProvider.Get(reqCtx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
+			apiErr := NewError(ErrKeyProviderNotFound, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderFetchFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	config.Enabled = enabled
 	if err := e.socialProvider.Update(reqCtx, config); err != nil {
 		e.Logger().Error("failed to set social provider enabled state", zap.Error(err))
-		return ctx.Error(err, http.StatusInternalServerError)
+		apiErr := NewError(ErrKeyProviderUpdateFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	var resp dto.SocialProviderResponse
