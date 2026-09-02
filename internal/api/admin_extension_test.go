@@ -11,9 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
+	socialProviderService "go.lumeweb.com/portal-plugin-dashboard/internal/service/social_provider"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/portal/db/models"
@@ -21,9 +23,13 @@ import (
 )
 
 // adminTestOptions enables a real SQLite database and registers the social
-// admin extension against a mock "admin" API on the test router.
+// provider service + admin extension against a mock "admin" API on the test
+// router.
 var adminTestOptions = coreTesting.CombineOptions(
 	coreTesting.WithSQLite(),
+	coreTesting.WithService(pluginCore.SOCIAL_PROVIDER_SERVICE, func() (core.Service, []core.ContextBuilderOption, error) {
+		return socialProviderService.NewSocialProviderService()
+	}),
 	coreTesting.WithAPIExtension(NewAdminExtension()),
 )
 
@@ -187,5 +193,87 @@ func TestSocialAdminExtension_CreateValidation(t *testing.T) {
 		// provider_id/client_id/client_secret are required.
 		rec := adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", []byte(`{"display_name":"X"}`), token)
 		require.Equal(tb, http.StatusBadRequest, rec.Code, rec.Body.String())
+	}, adminTestOptions)
+}
+
+// Deleting a provider frees its provider_id: re-creating the same identifier
+// that was deleted must succeed (the unique index is not blocked by a
+// soft-deleted row).
+func TestSocialAdminExtension_DeleteAllowsRecreate(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		setupAdminDB(tb, ctx)
+		token := setupAdminAuth(tb, ctx, 1)
+
+		createBody := []byte(`{
+			"provider_id":"google",
+			"display_name":"Google",
+			"client_id":"cid",
+			"client_secret":"sec"
+		}`)
+
+		// Create, then delete.
+		rec := adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", createBody, token)
+		require.Equal(tb, http.StatusCreated, rec.Code, rec.Body.String())
+		var first dto.SocialProviderResponse
+		require.NoError(tb, json.Unmarshal(rec.Body.Bytes(), &first))
+
+		rec = adminRequest(tb, ctx, http.MethodDelete, "/api/social/providers/"+itoa(first.ID), nil, token)
+		require.Equal(tb, http.StatusNoContent, rec.Code, rec.Body.String())
+
+		// Re-create with the same provider_id — must not hit a unique violation.
+		rec = adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", createBody, token)
+		require.Equal(tb, http.StatusCreated, rec.Code, rec.Body.String())
+	}, adminTestOptions)
+}
+
+// Creating a provider with a duplicate provider_id maps to 409, not a 500.
+func TestSocialAdminExtension_CreateDuplicateProviderIDConflict(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		setupAdminDB(tb, ctx)
+		token := setupAdminAuth(tb, ctx, 1)
+
+		createBody := []byte(`{
+			"provider_id":"github",
+			"display_name":"GitHub",
+			"client_id":"cid",
+			"client_secret":"sec"
+		}`)
+
+		rec := adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", createBody, token)
+		require.Equal(tb, http.StatusCreated, rec.Code, rec.Body.String())
+
+		// Second create with the same provider_id → 409 conflict.
+		rec = adminRequest(tb, ctx, http.MethodPost, "/api/social/providers", createBody, token)
+		require.Equal(tb, http.StatusConflict, rec.Code, rec.Body.String())
+	}, adminTestOptions)
+}
+
+// The admin routes are gated admin-only: every route the extension registers
+// must declare ACCESS_ADMIN_ROLE. The unauthenticated rejection is covered by
+// TestSocialAdminExtension_RequiresAuth; enforcement of the role itself is the
+// portal access service's job in production, so this asserts the extension
+// declares the admin gate on every route.
+func TestSocialAdminExtension_AdminRoutesDeclareAdminRole(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Use the started, registered extension: its BaseComponent was injected
+		// by the runtime startup (same path billing's admin uses to wire the
+		// middleware against the API context).
+		var adminExt *SocialAdminExtension
+		for _, ext := range core.GetAPIExtensions("admin") {
+			if x, ok := ext.(*SocialAdminExtension); ok {
+				adminExt = x
+				break
+			}
+		}
+		require.NotNil(tb, adminExt)
+		require.NotNil(tb, adminExt.Context())
+
+		routes := adminExt.buildRoutes()
+		require.NotEmpty(tb, routes)
+		for _, r := range routes {
+			t.Run(r.Path, func(t *testing.T) {
+				assert.Equal(t, core.ACCESS_ADMIN_ROLE, r.Access, "route %s %s not gated admin", r.Method, r.Path)
+			})
+		}
 	}, adminTestOptions)
 }

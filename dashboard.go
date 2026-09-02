@@ -15,6 +15,7 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/keyidentity"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	apiKeyService "go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
+	socialProviderService "go.lumeweb.com/portal-plugin-dashboard/internal/service/social_provider"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/service"
 	"go.lumeweb.com/web/go/portal-plugin-dashboard"
@@ -69,6 +70,13 @@ func GetPluginInfo() core.PluginInfo {
 					},
 					Metrics: apiKeyService.GetCollectors(),
 					Depends: []string{core.USER_SERVICE, core.AUTH_SERVICE},
+				},
+				{
+					ID: pluginCore.SOCIAL_PROVIDER_SERVICE,
+					Factory: func() (core.Service, []core.ContextBuilderOption, error) {
+						return socialProviderService.NewSocialProviderService()
+					},
+					Depends: []string{core.USER_SERVICE},
 				},
 			}, nil
 		},

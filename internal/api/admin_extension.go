@@ -11,12 +11,14 @@ import (
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	"go.lumeweb.com/portal-middleware/middleware"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db"
 	"go.lumeweb.com/queryutil"
 	queryutilHttp "go.lumeweb.com/queryutil/http"
 	"go.uber.org/zap"
@@ -27,7 +29,8 @@ import (
 // management (full CRUD over SocialProviderConfig rows).
 type SocialAdminExtension struct {
 	*core.BaseComponent
-	providerStore *provider.ProviderStore
+	providerStore  *provider.ProviderStore
+	socialProvider pluginCore.SocialProviderService
 }
 
 // NewAdminExtension builds the admin API extension for provider management.
@@ -37,6 +40,7 @@ func NewAdminExtension() core.APIExtensionFactory {
 
 		return ext, core.ContextOptions(
 			core.ContextWithStartupFunc(func(ctx core.Context) error {
+				ext.socialProvider = core.GetService[pluginCore.SocialProviderService](ctx, pluginCore.SOCIAL_PROVIDER_SERVICE)
 				ext.providerStore = provider.Provider()
 				ext.providerStore.SetContext(ctx)
 				return nil
@@ -155,21 +159,7 @@ func (e *SocialAdminExtension) handleListProviders(c echo.Context) error {
 		c.Request(),
 		"social_providers",
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.SocialProviderConfig, int64, error) {
-			db := e.DB().WithContext(reqCtx).Model(&pluginDb.SocialProviderConfig{})
-			db = queryutil.ApplyFilters(db, filters, nil)
-			db = queryutil.ApplySort(db, sorts)
-
-			var total int64
-			if err := db.Count(&total).Error; err != nil {
-				return nil, 0, err
-			}
-
-			db = queryutil.ApplyPagination(db, pagination)
-			var configs []*pluginDb.SocialProviderConfig
-			if err := db.Find(&configs).Error; err != nil {
-				return nil, 0, err
-			}
-			return configs, total, nil
+			return e.socialProvider.List(reqCtx, filters, sorts, pagination)
 		},
 		func(config *pluginDb.SocialProviderConfig) dto.SocialProviderResponse {
 			var resp dto.SocialProviderResponse
@@ -211,7 +201,10 @@ func (e *SocialAdminExtension) handleCreateProvider(c echo.Context) error {
 		return ctx.Error(err, http.StatusBadRequest)
 	}
 
-	if err := e.DB().WithContext(reqCtx).Create(config).Error; err != nil {
+	if err := e.socialProvider.Create(reqCtx, config); err != nil {
+		if db.IsDuplicateKeyError(err) {
+			return ctx.Error(errors.New("provider_id already exists"), http.StatusConflict)
+		}
 		e.Logger().Error("failed to create social provider", zap.Error(err))
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
@@ -232,7 +225,7 @@ func (e *SocialAdminExtension) handleGetProvider(c echo.Context) error {
 		return ctx.Error(err, http.StatusBadRequest)
 	}
 
-	config, err := e.getProviderByID(reqCtx, id)
+	config, err := e.socialProvider.Get(reqCtx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
@@ -260,7 +253,7 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 		return nil
 	}
 
-	config, err := e.getProviderByID(reqCtx, id)
+	config, err := e.socialProvider.Get(reqCtx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
@@ -310,7 +303,10 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 		}
 	}
 
-	if err := e.DB().WithContext(reqCtx).Save(config).Error; err != nil {
+	if err := e.socialProvider.Update(reqCtx, config); err != nil {
+		if db.IsDuplicateKeyError(err) {
+			return ctx.Error(errors.New("provider_id already exists"), http.StatusConflict)
+		}
 		e.Logger().Error("failed to update social provider", zap.Error(err))
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
@@ -331,12 +327,17 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 		return ctx.Error(err, http.StatusBadRequest)
 	}
 
-	res := e.DB().WithContext(reqCtx).Delete(&pluginDb.SocialProviderConfig{}, id)
-	if res.Error != nil {
-		e.Logger().Error("failed to delete social provider", zap.Error(res.Error))
-		return ctx.Error(res.Error, http.StatusInternalServerError)
+	// Hard-delete: provider config is ephemeral admin state with no audit or
+	// restore value. A soft-deleted row keeps holding the provider_id unique
+	// slot, so re-creating a deleted provider (a normal admin workflow) would
+	// fail forever; the provider store is reloaded from the DB after every
+	// mutation anyway.
+	rows, err := e.socialProvider.Delete(reqCtx, id)
+	if err != nil {
+		e.Logger().Error("failed to delete social provider", zap.Error(err))
+		return ctx.Error(err, http.StatusInternalServerError)
 	}
-	if res.RowsAffected == 0 {
+	if rows == 0 {
 		return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
 	}
 
@@ -361,7 +362,7 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 		return ctx.Error(err, http.StatusBadRequest)
 	}
 
-	config, err := e.getProviderByID(reqCtx, id)
+	config, err := e.socialProvider.Get(reqCtx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ctx.Error(errors.New("provider not found"), http.StatusNotFound)
@@ -370,7 +371,7 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 	}
 
 	config.Enabled = enabled
-	if err := e.DB().WithContext(reqCtx).Save(config).Error; err != nil {
+	if err := e.socialProvider.Update(reqCtx, config); err != nil {
 		e.Logger().Error("failed to set social provider enabled state", zap.Error(err))
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
@@ -380,12 +381,6 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 	var resp dto.SocialProviderResponse
 	resp.FromModel(config)
 	return ctx.JSON(http.StatusOK, resp)
-}
-
-func (e *SocialAdminExtension) getProviderByID(ctx context.Context, id uint) (*pluginDb.SocialProviderConfig, error) {
-	var config pluginDb.SocialProviderConfig
-	err := e.DB().WithContext(ctx).First(&config, id).Error
-	return &config, err
 }
 
 // refreshProviderStore reloads the in-memory provider cache so provider

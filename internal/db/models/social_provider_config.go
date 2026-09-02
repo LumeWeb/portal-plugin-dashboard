@@ -27,6 +27,12 @@ type SocialProviderConfig struct {
 	OrderIndex   int            `gorm:"default:0"`                    // display ordering
 }
 
+// TableName explicitly names the table so it always matches the goose
+// migration regardless of GORM's default pluralization.
+func (SocialProviderConfig) TableName() string {
+	return "social_provider_configs"
+}
+
 // GetScopes deserializes the JSON scopes column into a []string.
 func (c *SocialProviderConfig) GetScopes() []string {
 	var scopes []string

@@ -50,18 +50,19 @@ var _ core.API = (*API)(nil)
 
 type API struct {
 	*core.BaseComponent
-	user          core.UserService
-	auth          core.AuthService
-	password      core.PasswordResetService
-	otp           core.OTPService
-	apiKey        pluginCore.APIKeyService
-	access        core.AccessService
-	http          core.HTTPService
-	requestSvc    core.RequestService
-	workflowSvc   core.WorkflowService
-	ops           core.OperationFinder
-	socialAuth    core.SocialAuthService
-	providerStore *provider.ProviderStore
+	user           core.UserService
+	auth           core.AuthService
+	password       core.PasswordResetService
+	otp            core.OTPService
+	apiKey         pluginCore.APIKeyService
+	access         core.AccessService
+	http           core.HTTPService
+	requestSvc     core.RequestService
+	workflowSvc    core.WorkflowService
+	ops            core.OperationFinder
+	socialAuth     core.SocialAuthService
+	socialProvider pluginCore.SocialProviderService
+	providerStore  *provider.ProviderStore
 }
 
 func (a *API) ID() string {
@@ -112,6 +113,7 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
 			api.socialAuth = core.GetServiceOptional[core.SocialAuthService](ctx, core.SOCIAL_AUTH_SERVICE)
+			api.socialProvider = core.GetServiceOptional[pluginCore.SocialProviderService](ctx, pluginCore.SOCIAL_PROVIDER_SERVICE)
 
 			pluginCfg := ctx.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 

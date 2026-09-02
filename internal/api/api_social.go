@@ -17,7 +17,6 @@ import (
 	"go.lumeweb.com/httputil"
 	mcontext "go.lumeweb.com/portal-middleware/context"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
-	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
@@ -692,8 +691,12 @@ func (a *API) socialAuthLogout(c echo.Context) error {
 // listPublicProviders returns enabled social login providers for the login
 // page. Only public metadata is exposed; secrets are never returned.
 func (a *API) listPublicProviders(c echo.Context) error {
-	var configs []pluginDb.SocialProviderConfig
-	if err := a.DB().Where("enabled = ?", true).Order("order_index ASC, display_name ASC").Find(&configs).Error; err != nil {
+	if a.socialProvider == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list providers"})
+	}
+
+	configs, err := a.socialProvider.ListEnabled(httputil.Context(c).Request().Context())
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list providers"})
 	}
 
