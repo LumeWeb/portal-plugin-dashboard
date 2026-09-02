@@ -66,7 +66,7 @@ func (s *ProviderStore) LoadFromDB(db *gorm.DB) error {
 	providers := make(map[string]OAuthProvider, len(configs))
 	for i := range configs {
 		cfg := &configs[i]
-		providers[cfg.ProviderID] = newGenericFromConfig(cfg, s.callbackURL(cfg.ProviderID))
+		providers[cfg.ProviderID] = newGenericFromConfig(cfg, s.callbackURL(cfg.ProviderID), s.logger())
 	}
 
 	s.mu.Lock()
@@ -170,6 +170,16 @@ func (s *ProviderStore) ListPublicProviders() []PublicProviderInfo {
 	return infos
 }
 
+// logger mirrors callbackURL's nil-context handling: LoadFromDB can run
+// before the store context is set, so fall back to the global logger
+// instead of panicking on a nil receiver.
+func (s *ProviderStore) logger() *core.Logger {
+	if s.ctx != nil {
+		return s.ctx.Logger()
+	}
+	return &core.Logger{Logger: zap.L()}
+}
+
 func (s *ProviderStore) callbackURL(providerID string) string {
 	if s.ctx == nil {
 		zap.L().Warn("provider store has no context; social provider callback URL unresolved",
@@ -202,13 +212,14 @@ func (s *ProviderStore) callbackURL(providerID string) string {
 	return base + u.Path
 }
 
-func newGenericFromConfig(cfg *pluginDb.SocialProviderConfig, callbackURL string) OAuthProvider {
+func newGenericFromConfig(cfg *pluginDb.SocialProviderConfig, callbackURL string, logger *core.Logger) OAuthProvider {
 	p := NewGenericOAuth2Provider(
 		cfg.ProviderID,
 		cfg.ClientID, cfg.ClientSecret,
 		cfg.GetScopes(),
 		cfg.AuthURL, cfg.TokenURL, cfg.UserURL, callbackURL,
 		cfg.UserEmailKey, cfg.UserIDKey, cfg.UserNameKey,
+		logger,
 	)
 	p.displayName = cfg.DisplayName
 	return p
