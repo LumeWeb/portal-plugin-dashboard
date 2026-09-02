@@ -20,11 +20,7 @@ import (
 	"go.lumeweb.com/portal/service"
 	_ "golang.org/x/image/webp"
 
-	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
-	"github.com/markbates/goth"
-	"github.com/markbates/goth/gothic"
-	"github.com/samber/lo"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/portal-middleware/auth"
@@ -35,7 +31,6 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
-	_ "go.lumeweb.com/portal-plugin-dashboard/internal/provider/providers"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/config"
 	"go.lumeweb.com/portal/core"
@@ -47,7 +42,6 @@ import (
 )
 
 const (
-	returnSessionKey = "return"
 	AuthCompletePath = "/api/auth/complete" // Path for authentication complete endpoint
 	RememberMeCookie = "remember_me"        // Cookie name for remember me flag
 )
@@ -56,16 +50,19 @@ var _ core.API = (*API)(nil)
 
 type API struct {
 	*core.BaseComponent
-	user        core.UserService
-	auth        core.AuthService
-	password    core.PasswordResetService
-	otp         core.OTPService
-	apiKey      pluginCore.APIKeyService
-	access      core.AccessService
-	http        core.HTTPService
-	requestSvc  core.RequestService
-	workflowSvc core.WorkflowService
-	ops         core.OperationFinder
+	user           core.UserService
+	auth           core.AuthService
+	password       core.PasswordResetService
+	otp            core.OTPService
+	apiKey         pluginCore.APIKeyService
+	access         core.AccessService
+	http           core.HTTPService
+	requestSvc     core.RequestService
+	workflowSvc    core.WorkflowService
+	ops            core.OperationFinder
+	socialAuth     core.SocialAuthService
+	socialProvider pluginCore.SocialProviderService
+	providerStore  *provider.ProviderStore
 }
 
 func (a *API) ID() string {
@@ -115,45 +112,16 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 		}),
 
 		core.ContextWithStartupFunc(func(ctx core.Context) error {
+			api.socialAuth = core.GetServiceOptional[core.SocialAuthService](ctx, core.SOCIAL_AUTH_SERVICE)
+			api.socialProvider = core.GetServiceOptional[pluginCore.SocialProviderService](ctx, pluginCore.SOCIAL_PROVIDER_SERVICE)
+
 			pluginCfg := ctx.Config().GetAPI(internal.PLUGIN_NAME).(*pluginConfig.APIConfig)
 
 			if pluginCfg.SocialLogin.Enabled {
-				authCookieKey, err := generateSocialKey(ctx, "auth")
-				if err != nil {
+				api.providerStore = provider.Provider()
+				api.providerStore.SetContext(ctx)
+				if err := api.providerStore.LoadFromDB(ctx.DB()); err != nil {
 					return err
-				}
-
-				encCookieKey, err := generateSocialKey(ctx, "encrypt")
-				if err != nil {
-					return err
-				}
-
-				cookieStore := sessions.NewCookieStore(authCookieKey, encCookieKey)
-				cookieStore.Options.HttpOnly = true
-				gothic.Store = cookieStore
-
-				for _provider, providerConfig := range pluginCfg.SocialLogin.Provider {
-					if !providerConfig.Enabled || !provider.ProviderExists(_provider) {
-						continue
-					}
-
-					provider.ConfigureProvider(_provider, providerConfig)
-				}
-
-				if pluginCfg.SocialLogin.Order != nil && len(pluginCfg.SocialLogin.Order) > 0 {
-					provider.SetProviderOrder(lo.Filter(pluginCfg.SocialLogin.Order, func(item string, _ int) bool {
-						return provider.ProviderExists(item)
-					}))
-				}
-
-				provider.Provider().SetContext(ctx)
-
-				for _, providerId := range provider.EnabledProviders() {
-					_provider, err := provider.CreateProvider(providerId)
-					if err != nil {
-						return err
-					}
-					goth.UseProviders(_provider)
 				}
 			}
 
@@ -522,7 +490,7 @@ func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) err
 	}
 
 	if pluginCfg.SocialLogin.Enabled {
-		if err := a.setupSocialAuthRoutes(gRouter); err != nil {
+		if err := a.setupSocialAuthRoutes(gRouter, authMw, accessMw); err != nil {
 			return fmt.Errorf("failed to setup social auth routes: %w", err)
 		}
 	}

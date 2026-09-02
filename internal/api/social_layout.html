@@ -1,0 +1,346 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {{if .MetaDescription}}<meta name="description" content="{{.MetaDescription}}">{{end}}
+  <title>{{template "page-title" .PageData}}</title>
+  <style>
+    :root {
+      --color-background:              #0D1D1C;
+      --color-subtle-background:       #111C1B;
+      --color-ui-element-background:   #0D2D2A;
+      --color-hovered-ui-element:      #103835;
+      --color-active-ui-element:       #153F3B;
+
+      --color-borders:                 #1A3432;
+      --color-ui-element-border:      #1F524D;
+      --color-hovered-element-border:  #256660;
+
+      --color-solid-background:        #12736B;
+      --color-hovered-solid-bg:        #15807A;
+
+      --color-accent:                  #12736B;
+      --color-accent-bright:           #20A795;
+      --color-card:                    #111C1B;
+      --color-hovered-card:            #0F2A28;
+      --color-text-subtle:             #7F9B96;
+
+      --color-low-contrast-text:       #ABEEDB;
+      --color-high-contrast-text:      #F8F8F8;
+      --color-muted-text:              #A9B5B3;
+
+      --color-link:                    #55CDB8;
+      --color-link-hover:              #ABEEDB;
+
+      --color-destructive:             #EF4343;
+      --color-destructive-foreground:  #DC2828;
+
+      --radius:                        6px;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      background-color: var(--color-background);
+      color: var(--color-high-contrast-text);
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      padding-bottom: 3.5rem;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background-color: var(--color-background);
+      z-index: 0;
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      background-color: var(--color-subtle-background);
+      border: 1px solid var(--color-borders);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 25rem;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .app-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      text-align: center;
+    }
+
+    .app-logo {
+      width: 3.5rem;
+      height: 3.5rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--color-borders);
+      background-color: var(--color-ui-element-background);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .app-logo-placeholder {
+      width: 1.75rem;
+      height: 1.75rem;
+      color: var(--color-muted-text);
+    }
+
+    .app-name {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--color-high-contrast-text);
+      line-height: 1.3;
+    }
+
+    .app-description {
+      font-size: 0.875rem;
+      color: var(--color-muted-text);
+      line-height: 1.5;
+    }
+
+    .divider {
+      height: 1px;
+      background-color: var(--color-borders);
+      width: 100%;
+    }
+
+    .info-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .info-text {
+      font-size: 0.875rem;
+      color: var(--color-high-contrast-text);
+      line-height: 1.6;
+    }
+
+    .helper-text {
+      font-size: 0.8125rem;
+      color: var(--color-muted-text);
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.625rem;
+      margin-top: 0.5rem;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1rem;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+      outline: none;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+
+    .btn:focus-visible {
+      border-color: var(--color-hovered-element-border);
+      box-shadow: 0 0 0 2px var(--color-hovered-element-border);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background-color: var(--color-solid-background);
+      color: var(--color-high-contrast-text);
+      border-color: var(--color-solid-background);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background-color: var(--color-hovered-solid-bg);
+      border-color: var(--color-hovered-solid-bg);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      background-color: var(--color-active-ui-element);
+    }
+
+    .btn-destructive {
+      background-color: transparent;
+      color: var(--color-destructive);
+      border-color: var(--color-destructive);
+    }
+
+    .btn-destructive:hover:not(:disabled) {
+      background-color: var(--color-destructive);
+      color: var(--color-high-contrast-text);
+    }
+
+    .btn-destructive:active:not(:disabled) {
+      background-color: var(--color-destructive-foreground);
+      color: var(--color-high-contrast-text);
+    }
+
+    .error-message {
+      font-size: 0.8125rem;
+      color: var(--color-destructive);
+      line-height: 1.5;
+      padding: 0.625rem 0.75rem;
+      background-color: rgba(239, 67, 67, 0.08);
+      border: 1px solid rgba(239, 67, 67, 0.2);
+      border-radius: var(--radius);
+      display: none;
+    }
+
+    .error-message.visible {
+      display: block;
+    }
+
+    .result {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .result.visible {
+      display: flex;
+    }
+
+    .result-icon {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .result-icon.icon-approved {
+      background-color: rgba(18, 115, 107, 0.15);
+      border: 1px solid rgba(18, 115, 107, 0.3);
+    }
+
+    .result-icon.icon-rejected {
+      background-color: rgba(239, 67, 67, 0.1);
+      border: 1px solid rgba(239, 67, 67, 0.2);
+    }
+
+    .result-icon svg {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+
+    .result-icon .icon-check {
+      display: none;
+    }
+
+    .result-icon .icon-x {
+      display: none;
+    }
+
+    .result-icon.icon-approved .icon-check {
+      display: block;
+    }
+
+    .result-icon.icon-rejected .icon-x {
+      display: block;
+    }
+
+    .result-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--color-high-contrast-text);
+      line-height: 1.3;
+    }
+
+    .result-description {
+      font-size: 0.875rem;
+      color: var(--color-muted-text);
+      line-height: 1.5;
+    }
+
+    .footer {
+      position: fixed;
+      bottom: 1rem;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      font-size: 0.75rem;
+      color: var(--color-muted-text);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .footer-logo {
+      height: 1.125rem;
+      width: auto;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .btn {
+        transition: none;
+      }
+    }
+
+    @media (max-width: 30em) {
+      body {
+        padding: 1rem;
+        padding-bottom: 3rem;
+      }
+      .card {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay" aria-hidden="true"></div>
+  <main class="card"{{if .AriaLabelledBy}} aria-labelledby="{{.AriaLabelledBy}}"{{end}}{{if .AriaDescribedBy}} aria-describedby="{{.AriaDescribedBy}}"{{end}}>
+    {{template "page-content" .PageData}}
+  </main>
+  <footer class="footer">
+    Powered by
+    <svg class="footer-logo" viewBox="0 0 373 373" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Pinner"><path d="M45.9695 213.883C20.9759 188.89 20.9759 148.367 45.9695 123.374L78.4392 90.9038C89.3635 79.9796 107.075 79.9796 117.999 90.9039V90.9039C128.924 101.828 128.924 119.54 117.999 130.464L108.867 139.597C92.8983 155.565 92.8983 181.455 108.867 197.423L224.149 312.705C235.106 323.662 235.106 341.427 224.149 352.384V352.384C213.192 363.341 195.427 363.341 184.47 352.384L45.9695 213.883Z" fill="currentColor"/><path d="M253.686 85.7724C278.68 110.766 278.68 151.288 253.686 176.282L218.76 211.208C209.362 220.606 194.124 220.606 184.726 211.208V211.208C175.327 201.81 175.327 186.572 184.726 177.173L196.53 165.369C212.448 149.45 212.448 123.642 196.53 107.724L148.851 60.045C137.929 49.1225 137.929 31.4137 148.851 20.4912V20.4912C159.774 9.56872 177.483 9.56872 188.405 20.4912L253.686 85.7724Z" fill="currentColor" opacity="0.75"/></svg>
+  </footer>
+</body>
+</html>
+{{end}}

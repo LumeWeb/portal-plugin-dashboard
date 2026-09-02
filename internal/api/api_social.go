@@ -1,22 +1,76 @@
 package api
 
 import (
-	"errors"
+	"crypto/rand"
+	"crypto/sha256"
+	_ "embed"
+	"encoding/base64"
 	"fmt"
+	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/markbates/goth"
-	"github.com/markbates/goth/gothic"
-	"github.com/sethvargo/go-password/password"
 	"go.lumeweb.com/httputil"
+	mcontext "go.lumeweb.com/portal-middleware/context"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db/models"
+	"go.lumeweb.com/queryutil"
+	queryutilHttp "go.lumeweb.com/queryutil/http"
 )
 
-func (a *API) buildSocialAuthRoutes() []router.Route {
+// publicProvider is the public metadata exposed for an enabled provider.
+type publicProvider struct {
+	ProviderID  string `json:"provider_id"`
+	DisplayName string `json:"display_name"`
+	OrderIndex  int    `json:"order_index"`
+}
+
+// socialConsentPageData carries the data rendered into the link-consent page:
+// the provider a user wants to link and the email address the link resolves
+// to. The provider user id and session state are never rendered; they live in
+// the HMAC-signed consent session.
+type socialConsentPageData struct {
+	ProviderName string
+	Email        string
+}
+
+// socialLayoutData is the shared layout wrapper for the embedded HTML
+// templates, mirroring the portal-plugin-mcp consent page.
+type socialLayoutData struct {
+	AriaLabelledBy  string
+	AriaDescribedBy string
+	MetaDescription string
+	PageData        any
+}
+
+//go:embed social_layout.html
+var socialLayoutHTML string
+
+//go:embed social_consent.html
+var socialConsentHTML string
+
+var socialConsentTemplate *template.Template
+
+func init() {
+	socialConsentTemplate = template.Must(template.New("social-consent").
+		Parse(socialLayoutHTML))
+	template.Must(socialConsentTemplate.New("page").Parse(socialConsentHTML))
+	template.Must(socialConsentTemplate.Parse(`{{define "consent"}}{{template "layout" .}}{{end}}`))
+}
+
+func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []router.Route {
 	return []router.Route{
+		router.NewRoute(http.MethodGet, "/api/account/auth/providers", a.listPublicProviders,
+			router.WithSwaggerOptions(
+				router.WithSummary("List available social login providers"),
+				router.WithDescription("Returns enabled social login providers for the login page. No authentication required."),
+			),
+		),
 		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider", a.socialAuthLogin,
 			router.WithSwaggerOptions(
 				router.WithSummary("Initiate Social Login"),
@@ -42,11 +96,60 @@ func (a *API) buildSocialAuthRoutes() []router.Route {
 				router.WithResponseHeaders(http.StatusTemporaryRedirect, "Redirecting to home page", nil, nil),
 			),
 		),
+		router.NewRoute(http.MethodGet, "/api/account/auth/links", a.listSocialLinks,
+			router.WithSwaggerOptions(
+				router.WithSummary("List linked social accounts"),
+				router.WithDescription("Returns the social login providers linked to the authenticated user's account."),
+			),
+			router.WithAccess(core.ACCESS_USER_ROLE),
+			router.WithMiddlewares(authMw, accessMw),
+		),
+		router.NewRoute(http.MethodPost, "/api/account/auth/sso/:provider/link", a.socialAuthLink,
+			router.WithSwaggerOptions(
+				router.WithSummary("Link social login provider"),
+				router.WithDescription("Initiate linking a social login provider to the authenticated user. Redirects to the provider's authentication page."),
+				router.WithPathParam("provider", "The social login provider (e.g., google, github)", "google"),
+				router.WithQueryParam("return", "URL to redirect to after successful linking", ""),
+				router.WithResponseHeaders(http.StatusFound, "Redirecting to social login provider", nil, nil),
+			),
+			router.WithAccess(core.ACCESS_USER_ROLE),
+			router.WithMiddlewares(authMw, accessMw),
+		),
+		router.NewRoute(http.MethodDelete, "/api/account/auth/sso/:provider", a.socialAuthUnlink,
+			router.WithSwaggerOptions(
+				router.WithSummary("Unlink social login provider"),
+				router.WithDescription("Unlinks a social login provider from the authenticated user's account."),
+				router.WithPathParam("provider", "The social login provider (e.g., google, github)", "google"),
+				router.WithSuccessResponse(http.StatusNoContent, "Provider unlinked"),
+			),
+			router.WithAccess(core.ACCESS_USER_ROLE),
+			router.WithMiddlewares(authMw, accessMw),
+		),
+		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider/consent", a.socialConsentPage,
+			router.WithSwaggerOptions(
+				router.WithSummary("Show social link consent page"),
+				router.WithDescription("Renders the consent page when a verified social login email matches an existing account. The page asks the user to approve linking the provider identity to that account before any link is created."),
+				router.WithPathParam("provider", "The social login provider (e.g., google, github)", "google"),
+				router.WithSuccessResponse(http.StatusOK, "Consent page (text/html)"),
+			),
+		),
+		router.NewRoute(http.MethodPost, "/api/account/auth/sso/:provider/consent", a.socialConsentSubmit,
+			router.WithSwaggerOptions(
+				router.WithSummary("Approve or reject social link consent"),
+				router.WithDescription("Approves or rejects linking the pending provider identity to the existing account. Called by the consent page. Returns the redirect URI to navigate to."),
+				router.WithPathParam("provider", "The social login provider (e.g., google, github)", "google"),
+				router.WithRequestBody(struct {
+					Approve bool `json:"approve"`
+				}{}, "Approval decision", true),
+				router.WithSuccessResponse(http.StatusOK, "Redirect URI", router.WithJSONContent(dto.SocialConsentResponse{})),
+			),
+			router.WithMiddlewares(a.verifySameOrigin()),
+		),
 	}
 }
 
-func (a *API) setupSocialAuthRoutes(gRouter router.Router) error {
-	socialAuthRoutes := a.buildSocialAuthRoutes()
+func (a *API) setupSocialAuthRoutes(gRouter router.Router, authMw, accessMw echo.MiddlewareFunc) error {
+	socialAuthRoutes := a.buildSocialAuthRoutes(authMw, accessMw)
 
 	if err := router.RegisterRoutes(gRouter, nil, a.Subdomain(), socialAuthRoutes); err != nil {
 		return fmt.Errorf("failed to register social auth routes: %w", err)
@@ -55,123 +158,597 @@ func (a *API) setupSocialAuthRoutes(gRouter router.Router) error {
 	return nil
 }
 
+// socialSessionKey returns the HMAC key used to sign the OAuth state cookie.
+func (a *API) socialSessionKey() ([]byte, error) {
+	return generateSocialKey(a.Context(), "session")
+}
+
+// generateRandomString produces a cryptographically random URL-safe string of
+// the given byte length.
+func generateRandomString(byteLen int) (string, error) {
+	b := make([]byte, byteLen)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// generateCodeChallengeS256 computes the S256 PKCE code challenge for a verifier.
+func generateCodeChallengeS256(verifier string) string {
+	h := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(h[:])
+}
+
 func (a *API) socialAuthLogin(c echo.Context) error {
 	ctx := httputil.Context(c)
 
-	returnUrl := c.QueryParam(returnSessionKey)
-
-	if !a.isValidReturnURL(returnUrl) {
-		return ctx.Error(errors.New("invalid return URL"), http.StatusBadRequest)
-	}
-
-	err := gothic.StoreInSession(returnSessionKey, returnUrl, c.Request(), c.Response())
-	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
-	}
-
-	if gothUser, err := gothic.CompleteUserAuth(c.Response(), c.Request()); err == nil {
-		a.setupOrLoginSocialUser(&gothUser, ctx, returnUrl)
+	var req dto.SocialLoginQuery
+	if _, ok := httputil.DecodeAndValidateQueryRequest[*dto.SocialLoginQuery, *dto.SocialLoginQuery](ctx, &req); !ok {
 		return nil
 	}
-	gothic.BeginAuthHandler(c.Response(), c.Request())
-	return nil
+
+	providerName := c.Param("provider")
+	returnUrl := req.ReturnURL
+	if returnUrl == "" {
+		returnUrl = "/"
+	}
+
+	if !a.isValidReturnURL(returnUrl) {
+		apiErr := NewError(ErrKeyInvalidReturnURL, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	oauthProvider, err := a.providerStore.GetProvider(providerName)
+	if err != nil {
+		apiErr := NewError(ErrKeyProviderNotEnabled, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	codeVerifier, err := generateRandomString(32)
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	state, err := generateRandomString(16)
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	session := &provider.SocialAuthSession{
+		State:        state,
+		CodeVerifier: codeVerifier,
+		ReturnURL:    returnUrl,
+	}
+
+	if err := provider.SaveSession(c.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	authURL := oauthProvider.AuthCodeURL(state, generateCodeChallengeS256(codeVerifier))
+	return c.Redirect(http.StatusFound, authURL)
 }
 
 func (a *API) socialAuthCallback(c echo.Context) error {
 	ctx := httputil.Context(c)
-	returnUrl, err := gothic.GetFromSession(returnSessionKey, c.Request())
-	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+
+	var req dto.SocialCallbackQuery
+	if _, ok := httputil.DecodeAndValidateQueryRequest[*dto.SocialCallbackQuery, *dto.SocialCallbackQuery](ctx, &req); !ok {
+		return nil
 	}
 
+	providerName := c.Param("provider")
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	session, err := provider.GetSession(c.Request(), key)
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	// The session is single-use; clear it regardless of the outcome below.
+	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
+
+	if req.State == "" || req.State != session.State {
+		apiErr := NewError(ErrKeyInvalidState, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	if req.Error != "" {
+		apiErr := NewError(ErrKeyProviderError, nil, req.Error)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	if req.Code == "" {
+		apiErr := NewError(ErrKeyMissingAuthCode, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	oauthProvider, err := a.providerStore.GetProvider(providerName)
+	if err != nil {
+		apiErr := NewError(ErrKeyProviderNotEnabled, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	user, err := oauthProvider.Exchange(c.Request().Context(), req.Code, session.CodeVerifier)
+	if err != nil {
+		apiErr := NewError(ErrKeyProviderExchangeFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	if session.Mode == provider.SessionModeLink {
+		return a.completeSocialLink(ctx, providerName, session, user)
+	}
+
+	return a.finishSocialLogin(ctx, providerName, user, session.ReturnURL)
+}
+
+// listSocialLinks returns the social accounts linked to the authenticated
+// user, using the standard queryutil list API (filters/sorts/pagination).
+func (a *API) listSocialLinks(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	userId, err := mcontext.GetUserID(ctx.Context)
+	if err != nil {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
+	}
+
+	return queryutilHttp.ProcessListRequest(
+		c.Response(),
+		c.Request(),
+		"social_accounts",
+		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.SocialAccount, int64, error) {
+			return a.socialAuth.ListAccounts(ctx.Request().Context(), userId, filters, sorts, pagination)
+		},
+		func(acct *models.SocialAccount) dto.SocialAccountResponse {
+			return dto.SocialAccountResponse{
+				Provider:       acct.Provider,
+				ProviderUserID: acct.ProviderUserID,
+				Email:          acct.Email,
+				CreatedAt:      acct.CreatedAt,
+			}
+		},
+	)
+}
+
+// socialAuthLink initiates linking a provider to the authenticated user. It
+// records the link mode and user id in the signed session, then redirects to
+// the provider.
+func (a *API) socialAuthLink(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	var req dto.SocialLoginQuery
+	if _, ok := httputil.DecodeAndValidateQueryRequest[*dto.SocialLoginQuery, *dto.SocialLoginQuery](ctx, &req); !ok {
+		return nil
+	}
+
+	providerName := c.Param("provider")
+	returnUrl := req.ReturnURL
+	if returnUrl == "" {
+		returnUrl = "/"
+	}
 	if !a.isValidReturnURL(returnUrl) {
-		return ctx.Error(errors.New("invalid return URL"), http.StatusBadRequest)
+		apiErr := NewError(ErrKeyInvalidReturnURL, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	gothUser, err := gothic.CompleteUserAuth(c.Response(), c.Request())
-
+	userId, err := mcontext.GetUserID(ctx.Context)
 	if err != nil {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
+	}
+
+	oauthProvider, err := a.providerStore.GetProvider(providerName)
+	if err != nil {
+		apiErr := NewError(ErrKeyProviderNotEnabled, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	codeVerifier, err := generateRandomString(32)
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	state, err := generateRandomString(16)
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	session := &provider.SocialAuthSession{
+		State:        state,
+		CodeVerifier: codeVerifier,
+		ReturnURL:    returnUrl,
+		Mode:         provider.SessionModeLink,
+		UserID:       userId,
+	}
+
+	if err := provider.SaveSession(c.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	authURL := oauthProvider.AuthCodeURL(state, generateCodeChallengeS256(codeVerifier))
+	return c.Redirect(http.StatusFound, authURL)
+}
+
+// completeSocialLink links a provider identity to the user recorded in the
+// link session, then redirects back to the return URL.
+func (a *API) completeSocialLink(ctx httputil.RequestContext, providerName string, session *provider.SocialAuthSession, user *provider.OAuth2User) error {
+	if session.UserID == 0 {
+		apiErr := NewError(ErrKeyInvalidLinkSession, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), session.UserID, providerName, user.ProviderUserID, user.Email); err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	a.setupOrLoginSocialUser(&gothUser, ctx, returnUrl)
+	target := session.ReturnURL
+	if target == "" {
+		target = "/"
+	}
+	http.Redirect(ctx.Response(), ctx.Request(), target, http.StatusFound)
 	return nil
+}
+
+// socialAuthUnlink removes a provider link from the authenticated user.
+func (a *API) socialAuthUnlink(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	providerName := c.Param("provider")
+
+	userId, err := mcontext.GetUserID(ctx.Context)
+	if err != nil {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
+	}
+
+	if err := a.socialAuth.UnlinkAccount(ctx.Request().Context(), userId, providerName); err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	return ctx.NoContent(http.StatusNoContent)
+}
+
+func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string, user *provider.OAuth2User, returnUrl string) error {
+	result, err := a.socialAuth.LoginOrLink(
+		ctx.Request().Context(),
+		providerName,
+		user.ProviderUserID,
+		user.Email,
+		user.EmailVerified,
+	)
+	if err != nil {
+		// A verified email that already belongs to a user means the person owns
+		// both identities. The identity is NOT linked silently: the user must
+		// confirm on a consent page first (a provider misreporting email
+		// verification must not let anyone take over an existing account).
+		// Unverified emails keep the conflict rejection.
+		if user.EmailVerified && core.IsAccountError(err) &&
+			core.AsAccountError(err).IsErrorType(core.ErrKeySocialEmailConflict) {
+			if ok, promptErr := a.promptLinkConsent(ctx, providerName, user, returnUrl); promptErr != nil {
+				return a.socialError(ctx, promptErr)
+			} else if ok {
+				return nil
+			}
+		}
+		return a.socialError(ctx, err)
+	}
+
+	// If the provider did not confirm the email, the account is created
+	// unverified and must be verified before a session is established.
+	if !result.EmailVerified {
+		if err := a.user.SendEmailVerification(ctx.Request().Context(), result.User.ID); err != nil {
+			return a.socialError(ctx, err)
+		}
+		http.Redirect(ctx.Response(), ctx.Request(), "/verify-email", http.StatusFound)
+		return nil
+	}
+
+	return a.loginAndRedirect(ctx, result.User.ID, returnUrl)
+}
+
+// promptLinkConsent handles a verified-email conflict during login by parking
+// the provider identity in a signed consent session and redirecting to the
+// consent page. No account link happens until the user approves. The conflict
+// is re-verified against the current account for that email; ok=false falls
+// through so the caller keeps the original conflict error.
+func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string, user *provider.OAuth2User, returnUrl string) (bool, error) {
+	exists, _, err := a.user.EmailExists(ctx.Request().Context(), user.Email)
+	if err != nil || !exists {
+		return false, nil
+	}
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		return false, a.writeInternalError(ctx, err)
+	}
+
+	session := &provider.SocialAuthSession{
+		Mode:           provider.SessionModeConsentLink,
+		ReturnURL:      returnUrl,
+		ProviderName:   providerName,
+		ProviderUserID: user.ProviderUserID,
+		Email:          user.Email,
+	}
+	if err := provider.SaveSession(ctx.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
+		return false, a.writeInternalError(ctx, err)
+	}
+
+	http.Redirect(ctx.Response(), ctx.Request(), socialConsentPath(providerName), http.StatusFound)
+	return true, nil
+}
+
+// socialConsentPage renders the link-consent page. The consent-mode session
+// cookie is the credential: it is HMAC-signed, single-use, and short-lived, so
+// the page only renders for a real, in-flight identity merge. A missing or
+// mismatched session redirects home.
+func (a *API) socialConsentPage(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+	session, err := provider.GetSession(c.Request(), key)
+	if err != nil || session.Mode != provider.SessionModeConsentLink ||
+		session.ProviderName == "" || session.ProviderUserID == "" || session.Email == "" {
+		return c.Redirect(http.StatusFound, "/")
+	}
+
+	displayName := a.providerDisplayName(ctx, session.ProviderName)
+	// Content-Type must be set before ExecuteTemplate writes the body.
+	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+	return socialConsentTemplate.ExecuteTemplate(c.Response().Writer, "consent", socialLayoutData{
+		AriaLabelledBy:  "consent-heading",
+		AriaDescribedBy: "consent-description",
+		MetaDescription: "Link your social account",
+		PageData: socialConsentPageData{
+			ProviderName: displayName,
+			Email:        session.Email,
+		},
+	})
+}
+
+// socialConsentSubmit processes the consent page approve/reject. The POST is
+// guarded against CSRF by a same-origin check; the browser's consent page
+// submits with a same-origin fetch, so a genuine approval always carries a
+// matching Origin. On approve the identity is linked to the account that
+// currently holds the email and the user is logged in; on reject the pending
+// session is cleared. Both cases return the next redirect URI as JSON.
+func (a *API) socialConsentSubmit(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	var req dto.SocialConsentRequest
+	if _, ok := httputil.DecodeAndValidateRequest[*dto.SocialConsentRequest, *dto.SocialConsentRequest](ctx, &req); !ok {
+		return nil // Error handled by DecodeAndValidateRequest
+	}
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		apiErr := NewError(ErrKeyInternalError, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+	session, err := provider.GetSession(c.Request(), key)
+	if err != nil || session.Mode != provider.SessionModeConsentLink ||
+		session.ProviderName == "" || session.ProviderUserID == "" || session.Email == "" {
+		// Expired or forged consent: clear whatever cookie is present and send
+		// the user home. A redirect payload (not a canonical error body) lets
+		// the consent page navigate away instead of stranding the user on an
+		// error with no way back.
+		provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
+		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
+	}
+	// Single-use: the pending identity cannot be approved twice.
+	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
+
+	if !req.Approve {
+		responseModel := &dto.SocialConsentResponse{RedirectURI: "/"}
+		var responseDto dto.SocialConsentResponse
+		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
+	}
+
+	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), session.Email)
+	if err != nil || !exists {
+		// The email no longer maps to an account; send the user home.
+		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
+	}
+
+	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), existing.ID, session.ProviderName, session.ProviderUserID, session.Email); err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	redirectURI, err := a.loginRedirectURI(ctx, existing.ID, session.ReturnURL)
+	if err != nil {
+		return a.socialError(ctx, err)
+	}
+
+	responseModel := &dto.SocialConsentResponse{RedirectURI: redirectURI}
+	var responseDto dto.SocialConsentResponse
+	return httputil.EncodeResponse(ctx, responseModel, &responseDto)
+}
+
+// providerDisplayName returns the user-facing name for a provider, falling back
+// to the provider identifier when it is not enabled or has no display name.
+func (a *API) providerDisplayName(ctx httputil.RequestContext, providerName string) string {
+	if a.providerStore == nil {
+		return providerName
+	}
+	p, err := a.providerStore.GetProvider(providerName)
+	if err != nil {
+		return providerName
+	}
+	return p.DisplayName()
+}
+
+// verifySameOrigin guards the consent POST against CSRF. The consent page
+// submits with a same-origin fetch carrying credentials, so a genuine approval
+// always carries an Origin matching the host the page was served from — the
+// API subdomain (e.g. account.example.com), not the bare core domain.
+// A cross-site request cannot set the Origin header to the victim's host.
+//
+// When a client strips Origin (privacy modes, some webviews), it falls back to
+// the Sec-Fetch-Site fetch-metadata header set by the same browser engine: a
+// genuine fetch from the consent page is "same-origin", and "none" is a
+// direct, user-initiated request. Anything else (cross-site, same-site
+// sibling, opaque "null" origin, absent) fails closed.
+func (a *API) verifySameOrigin() echo.MiddlewareFunc {
+	// Resolve the API host once: the OAuth flow routes are served from the
+	// dashboard API subdomain (see provider/setup.go callbackURL).
+	apiHost := a.http.APISubdomain(a.Name(), true)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if origin := c.Request().Header.Get("Origin"); origin != "" {
+				if sameOriginHost(apiHost, origin) {
+					return next(c)
+				}
+				return echo.NewHTTPError(http.StatusForbidden, "cross-origin request rejected")
+			}
+			switch c.Request().Header.Get("Sec-Fetch-Site") {
+			case "same-origin", "none":
+				return next(c)
+			default:
+				return echo.NewHTTPError(http.StatusForbidden, "cross-origin request rejected")
+			}
+		}
+	}
+}
+
+// sameOriginHost reports whether origin matches the expected host. The Origin
+// header is always absolute (scheme://host); the expected host may not carry a
+// scheme. Scheme is compared only when both are present; ports are ignored so
+// the check is purely by hostname.
+func sameOriginHost(expected, origin string) bool {
+	o, err := url.Parse(origin)
+	if err != nil || o.Hostname() == "" {
+		return false
+	}
+	if strings.Contains(expected, "://") {
+		d, err := url.Parse(expected)
+		if err != nil {
+			return false
+		}
+		return d.Hostname() == o.Hostname()
+	}
+	return expected == o.Hostname()
+}
+
+// loginRedirectURI establishes a session for the user and returns the
+// auth-complete URL to navigate to. It does not write a response, so callers
+// can either redirect (browser navigation) or return the URL as JSON.
+func (a *API) loginRedirectURI(ctx httputil.RequestContext, userID uint, returnUrl string) (string, error) {
+	_jwt, err := a.auth.LoginID(ctx.Request().Context(), userID, ctx.RealIP(), false)
+	if err != nil {
+		return "", err
+	}
+
+	return a.buildAuthCompleteURL(_jwt, returnUrl), nil
+}
+
+// loginAndRedirect establishes a session for the user and redirects to the
+// auth-complete endpoint.
+func (a *API) loginAndRedirect(ctx httputil.RequestContext, userID uint, returnUrl string) error {
+	redirectURL, err := a.loginRedirectURI(ctx, userID, returnUrl)
+	if err != nil {
+		return a.socialError(ctx, err)
+	}
+
+	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
+	return nil
+}
+
+// socialConsentPath is the consent page path for a provider, relative to the
+// API subdomain both the callback and the consent page are served from.
+func socialConsentPath(providerName string) string {
+	return fmt.Sprintf("/api/account/auth/sso/%s/consent", providerName)
+}
+
+// socialError maps an account error to its HTTP status, else a 500.
+func (a *API) socialError(ctx httputil.RequestContext, err error) error {
+	if core.IsAccountError(err) {
+		acctErr := core.AsAccountError(err)
+		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+	return ctx.Error(err, http.StatusInternalServerError)
+}
+
+// writeInternalError writes an internal-error response in this namespace.
+func (a *API) writeInternalError(ctx httputil.RequestContext, err error) error {
+	apiErr := NewError(ErrKeyInternalError, err)
+	return ctx.Error(apiErr, apiErr.HttpStatus())
 }
 
 func (a *API) socialAuthLogout(c echo.Context) error {
 	ctx := httputil.Context(c)
-	err := gothic.Logout(c.Response(), c.Request())
-	if err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
-	}
+
+	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
+
 	c.Response().Header().Set("Location", "/")
-	return c.NoContent(http.StatusTemporaryRedirect)
+	return ctx.NoContent(http.StatusTemporaryRedirect)
 }
 
-func (a *API) setupOrLoginSocialUser(guser *goth.User, ctx httputil.RequestContext, returnUrl string) {
-	exists, m, err := a.user.EmailExists(ctx.Request().Context(), guser.Email)
+// listPublicProviders returns enabled social login providers for the login
+// page. Only public metadata is exposed; secrets are never returned.
+func (a *API) listPublicProviders(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	if a.socialProvider == nil {
+		apiErr := NewError(ErrKeyProviderListFailed, nil)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	configs, err := a.socialProvider.ListEnabled(ctx.Request().Context())
 	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			_ = ctx.Error(acctErr, acctErr.HttpStatus())
-			return
-		}
-		_ = ctx.Error(err, http.StatusInternalServerError)
-		return
+		apiErr := NewError(ErrKeyProviderListFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	if !exists {
-		pw, err := password.Generate(64, 10, 10, false, false)
-		if err != nil {
-			_ = ctx.Error(err, http.StatusInternalServerError)
-			return
-		}
-
-		user, err := a.user.CreateAccount(ctx.Request().Context(), guser.Email, pw, false)
-		if err != nil {
-			if core.IsAccountError(err) {
-				acctErr := core.AsAccountError(err)
-				_ = ctx.Error(acctErr, acctErr.HttpStatus())
-				return
-			}
-			_ = ctx.Error(err, http.StatusInternalServerError)
-			return
-		}
-
-		// Use names from the social profile
-		err = a.user.UpdateAccountName(ctx.Request().Context(), user.ID, guser.FirstName, guser.LastName)
-		if err != nil {
-			if core.IsAccountError(err) {
-				acctErr := core.AsAccountError(err)
-				_ = ctx.Error(acctErr, acctErr.HttpStatus())
-				return
-			}
-			_ = ctx.Error(err, http.StatusInternalServerError)
-			return
-		}
-
-		// Ensure subsequent login uses the newly created account
-		m = user
+	providers := make([]publicProvider, 0, len(configs))
+	for _, cfg := range configs {
+		providers = append(providers, publicProvider{
+			ProviderID:  cfg.ProviderID,
+			DisplayName: cfg.DisplayName,
+			OrderIndex:  cfg.OrderIndex,
+		})
 	}
 
-	_jwt, err := a.auth.LoginID(ctx.Request().Context(), m.ID, ctx.RealIP(), false)
-	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			_ = ctx.Error(acctErr, acctErr.HttpStatus())
-			return
-		}
-		_ = ctx.Error(err, http.StatusInternalServerError)
-		return
-	}
-
-	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
-
-	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
+	return c.JSON(http.StatusOK, providers)
 }
 
-// isValidReturnURL checks if a return URL is a same-site relative path
-// Returns true for paths starting with "/" but not "//", false for empty or absolute URLs
+// isValidReturnURL checks if a return URL is a same-site relative path.
+// Returns true for paths starting with "/" but not "//", false otherwise.
 func (a *API) isValidReturnURL(returnUrl string) bool {
 	if returnUrl == "" {
 		return false
