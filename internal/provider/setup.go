@@ -2,133 +2,128 @@ package provider
 
 import (
 	"fmt"
-	"github.com/markbates/goth"
-	"github.com/samber/lo"
-	"go.lumeweb.com/portal-plugin-dashboard/internal"
-	pluginConfig "go.lumeweb.com/portal-plugin-dashboard/internal/config"
-	"go.lumeweb.com/portal/core"
+	"net/url"
 	"sort"
 	"sync"
+
+	"go.lumeweb.com/portal-plugin-dashboard/internal"
+	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
+	"go.lumeweb.com/portal/core"
+	"gorm.io/gorm"
 )
 
-type ProviderFactory func(key, secret, callback string) (goth.Provider, error)
-
-type ProviderSetup struct {
-	factories    map[string]ProviderFactory
-	configs      map[string]pluginConfig.ProviderConfig
-	names        map[string]string
-	order        []string
-	enabledCache []string
-	mu           sync.RWMutex
-	ctx          core.Context
+// PublicProviderInfo is the public metadata exposed for an enabled provider.
+type PublicProviderInfo struct {
+	ProviderID  string `json:"provider_id"`
+	DisplayName string `json:"display_name"`
+	OrderIndex  int    `json:"order_index"`
 }
 
-// NewProviderSetup creates a new ProviderSetup
-func NewProviderSetup() *ProviderSetup {
-	return &ProviderSetup{
-		factories: make(map[string]ProviderFactory),
-		configs:   make(map[string]pluginConfig.ProviderConfig),
-		names:     make(map[string]string),
+// ProviderStore holds the OAuthProvider instances for enabled providers,
+// built from SocialProviderConfig rows in the database. It is refreshed at
+// startup and after every admin CRUD mutation.
+type ProviderStore struct {
+	mu        sync.RWMutex
+	providers map[string]OAuthProvider
+	ctx       core.Context
+}
+
+// NewProviderStore creates an empty ProviderStore.
+func NewProviderStore() *ProviderStore {
+	return &ProviderStore{
+		providers: make(map[string]OAuthProvider),
 	}
 }
 
-// RegisterProvider registers a provider factory
-func (ps *ProviderSetup) RegisterProvider(id string, name string, factory ProviderFactory) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.factories[id] = factory
-	ps.names[id] = name
+// SetContext stores the core context used to compute the callback URL.
+func (s *ProviderStore) SetContext(ctx core.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ctx = ctx
 }
 
-// ConfigureProvider sets the configuration for a provider
-func (ps *ProviderSetup) ConfigureProvider(id string, config pluginConfig.ProviderConfig) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.configs[id] = config
-	ps.enabledCache = nil // Invalidate cache
-}
-
-// SetProviderOrder sets the custom order for providers
-func (ps *ProviderSetup) SetProviderOrder(order []string) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.order = order
-	ps.enabledCache = nil // Invalidate cache
-}
-
-// EnabledProviders returns a list of enabled providers in the specified order
-func (ps *ProviderSetup) EnabledProviders() []string {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-
-	if ps.enabledCache != nil {
-		return ps.enabledCache
+// LoadFromDB rebuilds the in-memory provider set from the enabled provider
+// rows in the database.
+func (s *ProviderStore) LoadFromDB(db *gorm.DB) error {
+	var configs []pluginDb.SocialProviderConfig
+	if err := db.Where("enabled = ?", true).Find(&configs).Error; err != nil {
+		return fmt.Errorf("load enabled social providers: %w", err)
 	}
 
-	var enabled []string
-	for name, config := range ps.configs {
-		if config.Enabled {
-			enabled = append(enabled, name)
-		}
+	providers := make(map[string]OAuthProvider, len(configs))
+	for i := range configs {
+		cfg := &configs[i]
+		providers[cfg.ProviderID] = newGenericFromConfig(cfg, s.callbackURL(cfg.ProviderID))
 	}
 
-	if len(ps.order) > 0 {
-		sort.Slice(enabled, func(i, j int) bool {
-			iIndex := lo.IndexOf(ps.order, enabled[i])
-			jIndex := lo.IndexOf(ps.order, enabled[j])
-			if iIndex == -1 {
-				return false
-			}
-			if jIndex == -1 {
-				return true
-			}
-			return iIndex < jIndex
-		})
-	} else {
-		sort.Strings(enabled)
-	}
-
-	ps.enabledCache = enabled
-	return enabled
+	s.mu.Lock()
+	s.providers = providers
+	s.mu.Unlock()
+	return nil
 }
 
-// CreateProvider creates a goth.Provider instance for the given provider name
-func (ps *ProviderSetup) CreateProvider(name string) (goth.Provider, error) {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
+// GetProvider returns the OAuthProvider for a provider identifier.
+func (s *ProviderStore) GetProvider(name string) (OAuthProvider, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	factory, ok := ps.factories[name]
+	p, ok := s.providers[name]
 	if !ok {
-		return nil, fmt.Errorf("provider %s not registered", name)
+		return nil, fmt.Errorf("provider %s not enabled", name)
 	}
-
-	config, ok := ps.configs[name]
-	if !ok || !config.Enabled {
-		return nil, fmt.Errorf("provider %s not configured or not enabled", name)
-	}
-
-	return factory(config.Key, config.Secret, fmt.Sprintf("%s/api/account/auth/sso/%s/callback", core.GetService[core.HTTPService](ps.ctx, core.HTTP_SERVICE).APISubdomain(internal.PLUGIN_NAME, true), name))
+	return p, nil
 }
 
-func (ps *ProviderSetup) ProviderName(name string) string {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
+// EnabledProviders returns the list of enabled provider identifiers.
+func (s *ProviderStore) EnabledProviders() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	if _, ok := ps.names[name]; !ok {
+	names := make([]string, 0, len(s.providers))
+	for name := range s.providers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ListPublicProviders returns public metadata for all enabled providers,
+// sorted by OrderIndex then ProviderID.
+func (s *ProviderStore) ListPublicProviders() []PublicProviderInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	infos := make([]PublicProviderInfo, 0, len(s.providers))
+	for name := range s.providers {
+		infos = append(infos, PublicProviderInfo{ProviderID: name})
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].ProviderID < infos[j].ProviderID
+	})
+	return infos
+}
+
+func (s *ProviderStore) callbackURL(providerID string) string {
+	if s.ctx == nil {
 		return ""
 	}
 
-	return ps.names[name]
+	httpSvc, ok := s.ctx.Service(core.HTTP_SERVICE).(core.HTTPService)
+	if !ok {
+		return ""
+	}
+
+	base := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+	u := url.URL{Path: "/api/account/auth/sso/" + providerID + "/callback"}
+	return base + u.Path
 }
 
-func (ps *ProviderSetup) ProviderExists(id string) bool {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-
-	_, ok := ps.factories[id]
-	return ok
-}
-
-func (ps *ProviderSetup) SetContext(ctx core.Context) {
-	ps.ctx = ctx
+func newGenericFromConfig(cfg *pluginDb.SocialProviderConfig, callbackURL string) OAuthProvider {
+	return NewGenericOAuth2Provider(
+		cfg.ProviderID,
+		cfg.ClientID, cfg.ClientSecret,
+		cfg.GetScopes(),
+		cfg.AuthURL, cfg.TokenURL, cfg.UserURL, callbackURL,
+		cfg.UserEmailKey, cfg.UserIDKey, cfg.UserNameKey,
+	)
 }

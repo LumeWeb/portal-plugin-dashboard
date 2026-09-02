@@ -5,9 +5,7 @@ import "go.lumeweb.com/portal/config"
 var _ config.APIConfig = (*SocialLogin)(nil)
 
 type SocialLogin struct {
-	Enabled  bool                      `config:"enabled"`
-	Provider map[string]ProviderConfig `config:"provider"`
-	Order    []string                  `config:"order"`
+	Enabled bool `config:"enabled"`
 }
 
 func (A SocialLogin) Defaults() map[string]any {

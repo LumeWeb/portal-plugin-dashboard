@@ -74,6 +74,13 @@ func GetPluginInfo() core.PluginInfo {
 		},
 		Models: []any{
 			&models.APIKey{},
+			&models.SocialProviderConfig{},
+		},
+
+		APIExtensions: func(ctx core.Context) ([]core.APIExtensionFactory, error) {
+			return []core.APIExtensionFactory{
+				api.NewAdminExtension(),
+			}, nil
 		},
 
 		Migrations: core.DBMigration{
