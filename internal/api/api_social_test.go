@@ -132,9 +132,10 @@ func TestFinishSocialLogin_UnverifiedEmailRequiresVerification(t *testing.T) {
 	}, socialTestOptions)
 }
 
-func TestFinishSocialLogin_EmailConflict(t *testing.T) {
+func TestFinishSocialLogin_UnverifiedEmailConflictRejected(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
 
 		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-3", "taken@example.com", false).
 			Return(nil, core.NewAccountError(core.ErrKeySocialEmailConflict, nil))
@@ -144,6 +145,31 @@ func TestFinishSocialLogin_EmailConflict(t *testing.T) {
 			&provider.OAuth2User{ProviderUserID: "uid-3", Email: "taken@example.com"}, "/")
 		require.Error(tb, err)
 		require.Equal(tb, http.StatusConflict, w.Code)
+		userSvc.AssertNotCalled(tb, "EmailExists")
+	}, socialTestOptions)
+}
+
+func TestFinishSocialLogin_VerifiedEmailConflictAutoLinks(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+
+		existing := &models.User{Model: gorm.Model{ID: 12}, Email: "taken@example.com"}
+		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-3", "taken@example.com", true).
+			Return(nil, core.NewAccountError(core.ErrKeySocialEmailConflict, nil))
+		userSvc.EXPECT().EmailExists(mock.Anything, "taken@example.com").Return(true, existing, nil)
+		socialSvc.EXPECT().LinkAccount(mock.Anything, uint(12), "google", "uid-3", "taken@example.com").Return(nil)
+
+		loginToken := CreateTestLoginToken(tb, ctx, "12")
+		authSvc.EXPECT().LoginID(mock.Anything, uint(12), mock.Anything, false).Return(loginToken, nil)
+
+		reqCtx, w := newSocialTestContext(t)
+		err := api.finishSocialLogin(reqCtx, "google",
+			&provider.OAuth2User{ProviderUserID: "uid-3", Email: "taken@example.com", EmailVerified: true}, "/")
+		require.NoError(tb, err)
+		require.Equal(tb, http.StatusFound, w.Code)
+		require.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
 	}, socialTestOptions)
 }
 

@@ -373,11 +373,20 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 		user.EmailVerified,
 	)
 	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			return ctx.Error(acctErr, acctErr.HttpStatus())
+		// A verified email that already belongs to a user means the person owns
+		// both identities: link the SSO identity to the existing account and log
+		// them in. Unverified emails keep the conflict rejection.
+		if user.EmailVerified && core.IsAccountError(err) &&
+			core.AsAccountError(err).IsErrorType(core.ErrKeySocialEmailConflict) {
+			userId, ok, linkErr := a.autoLinkOnVerifiedConflict(ctx, providerName, user)
+			if linkErr != nil {
+				return a.socialError(ctx, linkErr)
+			}
+			if ok {
+				return a.loginAndRedirect(ctx, userId, returnUrl)
+			}
 		}
-		return ctx.Error(err, http.StatusInternalServerError)
+		return a.socialError(ctx, err)
 	}
 
 	// If the provider did not confirm the email, the account is created
@@ -390,18 +399,46 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 		return nil
 	}
 
-	_jwt, err := a.auth.LoginID(ctx.Request().Context(), result.User.ID, ctx.RealIP(), false)
+	return a.loginAndRedirect(ctx, result.User.ID, returnUrl)
+}
+
+// autoLinkOnVerifiedConflict links the SSO identity to the existing account
+// that already holds the email and returns that account's id. It is only safe
+// because it runs after the provider confirmed the email. A lookup failure
+// falls through (ok=false) so the caller keeps the original conflict error.
+func (a *API) autoLinkOnVerifiedConflict(ctx httputil.RequestContext, providerName string, user *provider.OAuth2User) (uint, bool, error) {
+	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), user.Email)
+	if err != nil || !exists {
+		return 0, false, nil
+	}
+
+	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), existing.ID, providerName, user.ProviderUserID, user.Email); err != nil {
+		return 0, false, err
+	}
+
+	return existing.ID, true, nil
+}
+
+// loginAndRedirect establishes a session for the user and redirects to the
+// auth-complete endpoint.
+func (a *API) loginAndRedirect(ctx httputil.RequestContext, userID uint, returnUrl string) error {
+	_jwt, err := a.auth.LoginID(ctx.Request().Context(), userID, ctx.RealIP(), false)
 	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			return ctx.Error(acctErr, acctErr.HttpStatus())
-		}
-		return ctx.Error(err, http.StatusInternalServerError)
+		return a.socialError(ctx, err)
 	}
 
 	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
 	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
 	return nil
+}
+
+// socialError maps an account error to its HTTP status, else a 500.
+func (a *API) socialError(ctx httputil.RequestContext, err error) error {
+	if core.IsAccountError(err) {
+		acctErr := core.AsAccountError(err)
+		return ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+	return ctx.Error(err, http.StatusInternalServerError)
 }
 
 func (a *API) socialAuthLogout(c echo.Context) error {
