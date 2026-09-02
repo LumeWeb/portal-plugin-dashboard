@@ -209,12 +209,15 @@ func (e *SocialAdminExtension) handleCreateProvider(c echo.Context) error {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	if err := e.refreshProviderStore(reqCtx); err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
-	}
-
 	var resp dto.SocialProviderResponse
 	resp.FromModel(config)
+
+	if err := e.refreshProviderStore(reqCtx); err != nil {
+		// The DB write already committed; surface that the mutation succeeded
+		// but the live cache is stale instead of implying it failed (which
+		// would make callers retry into a duplicate-key error).
+		return ctx.JSON(http.StatusAccepted, resp)
+	}
 	return ctx.JSON(http.StatusCreated, resp)
 }
 
@@ -313,12 +316,12 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	if err := e.refreshProviderStore(reqCtx); err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
-	}
-
 	var resp dto.SocialProviderResponse
 	resp.FromModel(config)
+
+	if err := e.refreshProviderStore(reqCtx); err != nil {
+		return ctx.JSON(http.StatusAccepted, resp)
+	}
 	return ctx.JSON(http.StatusOK, resp)
 }
 
@@ -346,7 +349,8 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 	}
 
 	if err := e.refreshProviderStore(reqCtx); err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
+		// Row is gone; only the in-memory cache is stale.
+		return ctx.JSON(http.StatusAccepted, map[string]string{"error": "provider deleted but live cache reload failed"})
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -382,12 +386,12 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	if err := e.refreshProviderStore(reqCtx); err != nil {
-		return ctx.Error(err, http.StatusInternalServerError)
-	}
-
 	var resp dto.SocialProviderResponse
 	resp.FromModel(config)
+
+	if err := e.refreshProviderStore(reqCtx); err != nil {
+		return ctx.JSON(http.StatusAccepted, resp)
+	}
 	return ctx.JSON(http.StatusOK, resp)
 }
 
