@@ -90,8 +90,10 @@ func TestFinishSocialLogin_ExistingLinkLogsIn(t *testing.T) {
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
 
 		mockUser := &models.User{Model: gorm.Model{ID: 7}, Email: "linked@example.com"}
-		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-1", "linked@example.com", true).
-			Return(&core.SocialAuthResult{User: mockUser}, nil)
+		// Existing link whose email was verified at creation; provider reports
+		// verified, so emailVerified=false param is expected to not gate login.
+		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-1", "linked@example.com", false).
+			Return(&core.SocialAuthResult{User: mockUser, EmailVerified: true}, nil)
 		loginToken := CreateTestLoginToken(tb, ctx, "7")
 		authSvc.EXPECT().LoginID(mock.Anything, uint(7), mock.Anything, false).Return(loginToken, nil)
 
@@ -104,29 +106,29 @@ func TestFinishSocialLogin_ExistingLinkLogsIn(t *testing.T) {
 	}, socialTestOptions)
 }
 
-// SSO auto-verifies email: even when the provider does NOT confirm the email,
-// LoginOrLink is called with emailVerified=true and a session is established.
-func TestFinishSocialLogin_SSOAutoVerifiesEmail(t *testing.T) {
+// When the provider does NOT confirm the email, the account is created
+// unverified and the user must verify the address before a session is set up.
+func TestFinishSocialLogin_UnverifiedEmailRequiresVerification(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
 
-		// Provider explicitly reports email NOT verified.
-		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-2", "unverified@example.com", true).
+		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-2", "unverified@example.com", false).
 			Return(&core.SocialAuthResult{
 				User:          &models.User{Model: gorm.Model{ID: 8}, Email: "unverified@example.com"},
 				EmailVerified: false,
 			}, nil)
-		loginToken := CreateTestLoginToken(tb, ctx, "8")
-		authSvc.EXPECT().LoginID(mock.Anything, uint(8), mock.Anything, false).Return(loginToken, nil)
+		userSvc.EXPECT().SendEmailVerification(mock.Anything, uint(8)).Return(nil)
 
 		reqCtx, w := newSocialTestContext(t)
 		err := api.finishSocialLogin(reqCtx, "google",
 			&provider.OAuth2User{ProviderUserID: "uid-2", Email: "unverified@example.com", EmailVerified: false}, "/")
 		require.NoError(tb, err)
-		// Session is established despite unverified email.
+		// No session: redirected to the verification page instead of auth-complete.
 		require.Equal(tb, http.StatusFound, w.Code)
-		require.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
+		require.Equal(tb, "/verify-email", w.Header().Get("Location"))
+		authSvc.AssertNotCalled(tb, "LoginID")
 	}, socialTestOptions)
 }
 
@@ -134,7 +136,7 @@ func TestFinishSocialLogin_EmailConflict(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		api, socialSvc := socialTestAPI(ctx)
 
-		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-3", "taken@example.com", true).
+		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-3", "taken@example.com", false).
 			Return(nil, core.NewAccountError(core.ErrKeySocialEmailConflict, nil))
 
 		reqCtx, w := newSocialTestContext(t)
@@ -256,7 +258,7 @@ func TestSocialAuthCallback_LoginFlow(t *testing.T) {
 
 		mockUser := &models.User{Model: gorm.Model{ID: 7}, Email: "u@example.com"}
 		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-1", "u@example.com", true).
-			Return(&core.SocialAuthResult{User: mockUser}, nil)
+			Return(&core.SocialAuthResult{User: mockUser, EmailVerified: true}, nil)
 		loginToken := CreateTestLoginToken(tb, ctx, "7")
 		authSvc.EXPECT().LoginID(mock.Anything, uint(7), mock.Anything, false).Return(loginToken, nil)
 

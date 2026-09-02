@@ -17,6 +17,7 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
+	"go.uber.org/zap"
 )
 
 // publicProvider is the public metadata exposed for an enabled provider.
@@ -364,14 +365,12 @@ func (a *API) socialAuthUnlink(c echo.Context) error {
 }
 
 func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string, user *provider.OAuth2User, returnUrl string) error {
-	// SSO presence is treated as proof of email ownership: emailVerified is
-	// always true so a newly created account is marked verified immediately.
 	result, err := a.socialAuth.LoginOrLink(
 		ctx.Request().Context(),
 		providerName,
 		user.ProviderUserID,
 		user.Email,
-		true,
+		user.EmailVerified,
 	)
 	if err != nil {
 		if core.IsAccountError(err) {
@@ -379,6 +378,16 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
 		return ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	// If the provider did not confirm the email, the account is created
+	// unverified and must be verified before a session is established.
+	if !result.EmailVerified {
+		if err := a.user.SendEmailVerification(ctx.Request().Context(), result.User.ID); err != nil && !core.IsAccountError(err) {
+			a.Logger().Warn("failed to send email verification", zap.Error(err))
+		}
+		http.Redirect(ctx.Response(), ctx.Request(), "/verify-email", http.StatusFound)
+		return nil
 	}
 
 	_jwt, err := a.auth.LoginID(ctx.Request().Context(), result.User.ID, ctx.RealIP(), false)
