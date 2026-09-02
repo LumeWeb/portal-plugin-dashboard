@@ -89,7 +89,9 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 	}
 
 	var raw map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	dec := json.NewDecoder(resp.Body)
+	dec.UseNumber() // keep numeric ids precise and typed, not float64
+	if err := dec.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("decode userinfo: %w", err)
 	}
 
@@ -121,28 +123,28 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 		Name:           name,
 	}
 
-	if v, ok := raw["email_verified"]; ok {
-		if b, ok := v.(bool); ok {
-			user.EmailVerified = b
-		}
-	}
+	// koanf's Bool getter is true only for an explicit truthy value; absent or
+	// false email_verified means unverified, which login treats as requiring
+	// verification.
+	user.EmailVerified = k.Bool("email_verified")
 
 	return user, nil
 }
 
-// valueAt fetches a dot-notation key (e.g. "data.id") via koanf and reports
-// whether it was present and non-nil, so callers never receive a
-// "<nil>"-formatted value.
+// valueAt fetches a dot-notation key (e.g. "data.id") via koanf. Only scalar
+// string/number values are accepted; absent keys or aggregate values (objects,
+// arrays) report false so callers reject them instead of building a principal
+// from a garbage-formatted value.
 func valueAt(k *koanf.Koanf, key string) (string, bool) {
 	if !k.Exists(key) {
 		return "", false
 	}
-	v := k.Get(key)
-	if v == nil {
+	switch v := k.Get(key).(type) {
+	case string:
+		return v, true
+	case json.Number:
+		return v.String(), true
+	default:
 		return "", false
 	}
-	if s, ok := v.(string); ok {
-		return s, true
-	}
-	return fmt.Sprintf("%v", v), true
 }

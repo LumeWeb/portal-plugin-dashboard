@@ -170,6 +170,63 @@ func TestGenericOAuth2Provider_Exchange_MissingEmailKey(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// An aggregate (object/array) value for the id/email key must be rejected, not
+// coerced via fmt.Sprintf into a garbage principal.
+func TestGenericOAuth2Provider_Exchange_RejectsAggregateID(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sub":{"id":"nested"},"email":"u@example.com"}`))
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	_, err := p.Exchange(t.Context(), "code", "verifier")
+	assert.Error(t, err)
+}
+
+// A numeric id must be preserved precisely (json.Number), not float-formatted.
+func TestGenericOAuth2Provider_Exchange_NumericID(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sub":123456789012345678,"email":"u@example.com"}`))
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	user, err := p.Exchange(t.Context(), "code", "verifier")
+	require.NoError(t, err)
+	assert.Equal(t, "123456789012345678", user.ProviderUserID)
+}
+
+// Absent email_verified means unverified (koanf Bool defaults to false).
+func TestGenericOAuth2Provider_Exchange_MissingEmailVerified(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sub":"abc123","email":"u@example.com"}`))
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	user, err := p.Exchange(t.Context(), "code", "verifier")
+	require.NoError(t, err)
+	assert.False(t, user.EmailVerified)
+}
+
 // Nesting is resolved via dot-notation (koanf), e.g. id at "data.id".
 func TestGenericOAuth2Provider_Exchange_NestedKeys(t *testing.T) {
 	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

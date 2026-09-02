@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -129,6 +130,28 @@ func TestFinishSocialLogin_UnverifiedEmailRequiresVerification(t *testing.T) {
 		require.Equal(tb, http.StatusFound, w.Code)
 		require.Equal(tb, "/verify-email", w.Header().Get("Location"))
 		authSvc.AssertNotCalled(tb, "LoginID")
+	}, socialTestOptions)
+}
+
+// A failed verification-email send must surface as an error, not redirect.
+func TestFinishSocialLogin_UnverifiedEmailSendFailure(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
+
+		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-2", "unverified@example.com", false).
+			Return(&core.SocialAuthResult{
+				User:          &models.User{Model: gorm.Model{ID: 8}, Email: "unverified@example.com"},
+				EmailVerified: false,
+			}, nil)
+		userSvc.EXPECT().SendEmailVerification(mock.Anything, uint(8)).
+			Return(errors.New("mailer down"))
+
+		reqCtx, w := newSocialTestContext(t)
+		err := api.finishSocialLogin(reqCtx, "google",
+			&provider.OAuth2User{ProviderUserID: "uid-2", Email: "unverified@example.com", EmailVerified: false}, "/")
+		require.Error(tb, err)
+		require.Equal(tb, http.StatusInternalServerError, w.Code)
 	}, socialTestOptions)
 }
 
