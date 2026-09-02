@@ -11,6 +11,7 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -171,18 +172,29 @@ func (s *ProviderStore) ListPublicProviders() []PublicProviderInfo {
 
 func (s *ProviderStore) callbackURL(providerID string) string {
 	if s.ctx == nil {
+		zap.L().Warn("provider store has no context; social provider callback URL unresolved",
+			zap.String("provider", providerID))
 		return ""
 	}
 
-	httpSvc, ok := s.ctx.Service(core.HTTP_SERVICE).(core.HTTPService)
-	if !ok {
+	httpSvc := core.GetServiceOptional[core.HTTPService](s.ctx, core.HTTP_SERVICE)
+	if httpSvc == nil {
+		s.ctx.Logger().Warn("http service unavailable; social provider callback URL unresolved",
+			zap.String("provider", providerID))
+		return ""
+	}
+
+	// APISubdomain returns an empty string when the API is not registered.
+	base := httpSvc.APISubdomain(internal.PLUGIN_NAME, true)
+	if base == "" {
+		s.ctx.Logger().Warn("dashboard api subdomain unavailable; social provider callback URL unresolved",
+			zap.String("provider", providerID))
 		return ""
 	}
 
 	// An external IdP fetches this URL from the browser, so a bare host (the
 	// insecure-config return of APISubdomain) is never acceptable; only https
 	// satisfies providers like Google's secure-response-handling validation.
-	base := httpSvc.APISubdomain(internal.PLUGIN_NAME, true)
 	if !strings.Contains(base, "://") {
 		base = "https://" + base
 	}
