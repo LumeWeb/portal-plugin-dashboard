@@ -13,6 +13,7 @@ require (
 	github.com/knadh/koanf/v2 v2.3.6
 	github.com/kolesa-team/go-webp v1.0.5
 	github.com/labstack/echo/v4 v4.15.4
+	github.com/mr-tron/base58 v1.3.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.24.1
@@ -20,7 +21,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/gswagger v0.20.12
 	go.lumeweb.com/httputil v0.5.8
-	go.lumeweb.com/portal v0.5.2-0.20260902094716-8c8a7c2a294c
+	go.lumeweb.com/portal v0.5.2-0.20260902104811-bf9a0165133a
 	go.lumeweb.com/portal-middleware v0.3.7
 	go.lumeweb.com/portal-router v0.7.7
 	go.lumeweb.com/queryutil v0.3.19
@@ -133,7 +134,6 @@ require (
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/mr-tron/base58 v1.3.0 // indirect
 	github.com/multiformats/go-base32 v0.1.0 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
 	github.com/multiformats/go-multibase v0.3.0 // indirect
