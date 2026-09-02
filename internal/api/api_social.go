@@ -561,10 +561,11 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 	if err != nil || session.Mode != provider.SessionModeConsentLink ||
 		session.ProviderName == "" || session.ProviderUserID == "" || session.Email == "" {
 		// Expired or forged consent: clear whatever cookie is present and send
-		// the user home rather than linking anything.
+		// the user home. A redirect payload (not a canonical error body) lets
+		// the consent page navigate away instead of stranding the user on an
+		// error with no way back.
 		provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
-		apiErr := NewError(ErrKeyInvalidConsentSession, err)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
 	}
 	// Single-use: the pending identity cannot be approved twice.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
@@ -577,8 +578,8 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 
 	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), session.Email)
 	if err != nil || !exists {
-		apiErr := NewError(ErrKeyInvalidConsentSession, nil)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		// The email no longer maps to an account; send the user home.
+		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
 	}
 
 	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), existing.ID, session.ProviderName, session.ProviderUserID, session.Email); err != nil {

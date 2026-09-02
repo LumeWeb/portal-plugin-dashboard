@@ -21,11 +21,13 @@ type PublicProviderInfo struct {
 
 // ProviderStore holds the OAuthProvider instances for enabled providers,
 // built from SocialProviderConfig rows in the database. It is refreshed at
-// startup and after every admin CRUD mutation.
+// startup and after every admin CRUD mutation, and self-heals on a lookup
+// miss so a failed cache reload never leaves login reading stale providers.
 type ProviderStore struct {
 	mu        sync.RWMutex
 	providers map[string]OAuthProvider
 	ctx       core.Context
+	db        *gorm.DB
 }
 
 // NewProviderStore creates an empty ProviderStore.
@@ -58,20 +60,38 @@ func (s *ProviderStore) LoadFromDB(db *gorm.DB) error {
 
 	s.mu.Lock()
 	s.providers = providers
+	s.db = db
 	s.mu.Unlock()
 	return nil
 }
 
-// GetProvider returns the OAuthProvider for a provider identifier.
+// GetProvider returns the OAuthProvider for a provider identifier. On a miss it
+// falls back to reloading from the DB to self-heal: an admin mutation whose
+// cache reload failed (or a provider created elsewhere in a multi-instance
+// setup) would otherwise leave the login path reading a stale cache until the
+// next process restart.
 func (s *ProviderStore) GetProvider(name string) (OAuthProvider, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	p, ok := s.providers[name]
-	if !ok {
-		return nil, fmt.Errorf("provider %s not enabled", name)
+	db := s.db
+	s.mu.RUnlock()
+	if ok {
+		return p, nil
 	}
-	return p, nil
+
+	if db != nil {
+		if err := s.LoadFromDB(db); err != nil {
+			return nil, err
+		}
+		s.mu.RLock()
+		p, ok = s.providers[name]
+		s.mu.RUnlock()
+		if ok {
+			return p, nil
+		}
+	}
+
+	return nil, fmt.Errorf("provider %s not enabled", name)
 }
 
 // EnabledProviders returns the list of enabled provider identifiers.

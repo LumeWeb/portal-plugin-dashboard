@@ -207,11 +207,18 @@
       })
       .then(function(response) {
         return response.json().then(function(data) {
+          // An expired/forged single-use consent returns a JSON redirect with a
+          // non-2xx status; send the user home instead of showing an error.
+          if (data && typeof data.redirect_uri === "string" && data.redirect_uri) {
+            window.location.href = data.redirect_uri;
+            return null;
+          }
           if (response.status !== 200) { throw new Error(data.error || data.message || "An unexpected error occurred."); }
           return data;
         });
       })
       .then(function(data) {
+        if (!data) { return; }
         redirectUri = data.redirect_uri || "";
         showResult(key);
       })

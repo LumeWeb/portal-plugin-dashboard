@@ -21,7 +21,6 @@ const (
 	ErrKeyProviderError          core.ErrorType = "PROVIDER_ERROR"
 	ErrKeyMissingAuthCode        core.ErrorType = "MISSING_AUTH_CODE"
 	ErrKeyInvalidLinkSession     core.ErrorType = "INVALID_LINK_SESSION"
-	ErrKeyInvalidConsentSession  core.ErrorType = "INVALID_CONSENT_SESSION"
 	ErrKeyProviderNotEnabled     core.ErrorType = "PROVIDER_NOT_ENABLED"
 	ErrKeyProviderNotFound       core.ErrorType = "PROVIDER_NOT_FOUND"
 	ErrKeyProviderDuplicate      core.ErrorType = "PROVIDER_DUPLICATE"
@@ -31,7 +30,6 @@ const (
 	ErrKeyProviderDeleteFailed   core.ErrorType = "PROVIDER_DELETE_FAILED"
 	ErrKeyProviderListFailed     core.ErrorType = "PROVIDER_LIST_FAILED"
 	ErrKeyProviderExchangeFailed core.ErrorType = "PROVIDER_EXCHANGE_FAILED"
-	ErrKeyProviderCacheReload    core.ErrorType = "PROVIDER_CACHE_RELOAD_FAILED"
 )
 
 func init() {
@@ -44,7 +42,6 @@ func init() {
 		ErrKeyProviderError:          {Key: ErrKeyProviderError, Message: "The provider returned an error."},
 		ErrKeyMissingAuthCode:        {Key: ErrKeyMissingAuthCode, Message: "Missing authorization code."},
 		ErrKeyInvalidLinkSession:     {Key: ErrKeyInvalidLinkSession, Message: "Invalid link session."},
-		ErrKeyInvalidConsentSession:  {Key: ErrKeyInvalidConsentSession, Message: "Invalid or expired consent session."},
 		ErrKeyProviderNotEnabled:     {Key: ErrKeyProviderNotEnabled, Message: "Provider is not enabled."},
 		ErrKeyProviderNotFound:       {Key: ErrKeyProviderNotFound, Message: "Provider not found."},
 		ErrKeyProviderFetchFailed:    {Key: ErrKeyProviderFetchFailed, Message: "Failed to fetch provider."},
@@ -54,7 +51,6 @@ func init() {
 		ErrKeyProviderDeleteFailed:   {Key: ErrKeyProviderDeleteFailed, Message: "Failed to delete provider."},
 		ErrKeyProviderListFailed:     {Key: ErrKeyProviderListFailed, Message: "Failed to list providers."},
 		ErrKeyProviderExchangeFailed: {Key: ErrKeyProviderExchangeFailed, Message: "Failed to exchange the authorization code."},
-		ErrKeyProviderCacheReload:    {Key: ErrKeyProviderCacheReload, Message: "Provider saved but the live cache reload failed."},
 	})
 
 	core.MustRegisterErrorCodes(Namespace, map[core.ErrorType]int{
@@ -65,7 +61,6 @@ func init() {
 		ErrKeyProviderError:          http.StatusBadRequest,
 		ErrKeyMissingAuthCode:        http.StatusBadRequest,
 		ErrKeyInvalidLinkSession:     http.StatusBadRequest,
-		ErrKeyInvalidConsentSession:  http.StatusBadRequest,
 		ErrKeyProviderNotEnabled:     http.StatusBadRequest,
 		ErrKeyProviderNotFound:       http.StatusNotFound,
 		ErrKeyProviderFetchFailed:    http.StatusInternalServerError,
@@ -75,7 +70,6 @@ func init() {
 		ErrKeyProviderDeleteFailed:   http.StatusInternalServerError,
 		ErrKeyProviderListFailed:     http.StatusInternalServerError,
 		ErrKeyProviderExchangeFailed: http.StatusInternalServerError,
-		ErrKeyProviderCacheReload:    http.StatusInternalServerError,
 	})
 }
 

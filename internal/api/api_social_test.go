@@ -583,10 +583,10 @@ func TestSocialConsentSubmit_NoSession(t *testing.T) {
 		w := httptest.NewRecorder()
 		echoCtx := e.NewContext(req, w)
 
-		require.Error(tb, api.socialConsentSubmit(echoCtx))
+		require.NoError(tb, api.socialConsentSubmit(echoCtx))
 		require.Equal(tb, http.StatusBadRequest, w.Code)
-		// Framework error body, not a redirect_uri success payload.
-		require.Contains(tb, w.Body.String(), `"reason"`)
+		// A redirect payload sends the consent page home, not an error body.
+		require.Contains(tb, w.Body.String(), `"redirect_uri":"/"`)
 		socialSvc.AssertNotCalled(tb, "LinkAccount")
 		userSvc.AssertNotCalled(tb, "EmailExists")
 	}, socialTestOptions)
@@ -617,9 +617,9 @@ func TestSocialConsentSubmit_EmailGone(t *testing.T) {
 			w := httptest.NewRecorder()
 			echoCtx := e.NewContext(req, w)
 
-			require.Error(tb, api.socialConsentSubmit(echoCtx))
+			require.NoError(tb, api.socialConsentSubmit(echoCtx))
 			require.Equal(tb, http.StatusBadRequest, w.Code)
-			require.Contains(tb, w.Body.String(), `"reason"`)
+			require.Contains(tb, w.Body.String(), `"redirect_uri":"/"`)
 			socialSvc.AssertNotCalled(tb, "LinkAccount")
 		})
 	}, socialTestOptions)

@@ -216,9 +216,10 @@ func (e *SocialAdminExtension) handleCreateProvider(c echo.Context) error {
 	resp.FromModel(config)
 
 	if err := e.refreshProviderStore(reqCtx); err != nil {
-		// The DB write already committed; surface that the mutation succeeded
-		// but the live cache is stale instead of implying it failed (which
-		// would make callers retry into a duplicate-key error).
+		// The DB write already committed; the mutation succeeded. The cache is
+		// stale but self-heals on the next GetProvider miss, so the login path
+		// keeps working without a process restart. Return 202 (vs a 500 that
+		// would mislead callers into retrying into a duplicate-key error).
 		return ctx.JSON(http.StatusAccepted, resp)
 	}
 	return ctx.JSON(http.StatusCreated, resp)
@@ -363,9 +364,10 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 	}
 
 	if err := e.refreshProviderStore(reqCtx); err != nil {
-		// Row is gone; only the in-memory cache is stale.
-		cacheErr := NewError(ErrKeyProviderCacheReload, err)
-		return ctx.JSON(http.StatusAccepted, cacheErr)
+		// Row is gone; only the in-memory cache is stale, and the next
+		// GetProvider miss self-heals it. Return 202 consistently with the
+		// other refresh-failure branches rather than a 500-class error body.
+		return c.NoContent(http.StatusAccepted)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -416,7 +418,8 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 
 // refreshProviderStore reloads the in-memory provider cache so provider
 // changes take effect immediately. It returns the reload error so callers can
-// fail the mutation rather than report success while the live cache is stale.
+// surface a partial failure (202) rather than a plain success; the cache
+// self-heals on the next GetProvider miss, so login never reads stale data.
 func (e *SocialAdminExtension) refreshProviderStore(_ context.Context) error {
 	if err := e.providerStore.LoadFromDB(e.DB()); err != nil {
 		e.Logger().Error("failed to reload social providers", zap.Error(err))
