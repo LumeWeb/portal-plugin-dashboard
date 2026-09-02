@@ -178,7 +178,7 @@ func (s *ProviderStore) callbackURL(providerID string) string {
 		return ""
 	}
 
-	base := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+	base := httpSvc.APISubdomain(internal.PLUGIN_NAME, true)
 	u := url.URL{Path: "/api/account/auth/sso/" + providerID + "/callback"}
 	return base + u.Path
 }
