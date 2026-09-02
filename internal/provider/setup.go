@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +36,7 @@ type ProviderStore struct {
 	providers  map[string]OAuthProvider
 	ctx        core.Context
 	db         *gorm.DB
-	lastReload time.Time // last DB reload attempt, for the miss throttle
+	lastReload time.Time  // last DB reload attempt, for the miss throttle
 	reloadMu   sync.Mutex // serializes reloads so concurrent misses share one
 }
 
@@ -178,7 +179,13 @@ func (s *ProviderStore) callbackURL(providerID string) string {
 		return ""
 	}
 
-	base := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+	// An external IdP fetches this URL from the browser, so a bare host (the
+	// insecure-config return of APISubdomain) is never acceptable; only https
+	// satisfies providers like Google's secure-response-handling validation.
+	base := httpSvc.APISubdomain(internal.PLUGIN_NAME, true)
+	if !strings.Contains(base, "://") {
+		base = "https://" + base
+	}
 	u := url.URL{Path: "/api/account/auth/sso/" + providerID + "/callback"}
 	return base + u.Path
 }
