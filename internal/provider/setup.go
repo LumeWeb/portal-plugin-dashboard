@@ -5,12 +5,19 @@ import (
 	"net/url"
 	"sort"
 	"sync"
+	"time"
 
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	"gorm.io/gorm"
 )
+
+// reloadCooldown throttles how often a cache miss may trigger a DB reload. The
+// unauthenticated login endpoints drive lookups with caller-supplied provider
+// names, so without a window a burst of misses would amplify into one
+// full-table SELECT per request.
+const reloadCooldown = 2 * time.Second
 
 // PublicProviderInfo is the public metadata exposed for an enabled provider.
 type PublicProviderInfo struct {
@@ -24,10 +31,12 @@ type PublicProviderInfo struct {
 // startup and after every admin CRUD mutation, and self-heals on a lookup
 // miss so a failed cache reload never leaves login reading stale providers.
 type ProviderStore struct {
-	mu        sync.RWMutex
-	providers map[string]OAuthProvider
-	ctx       core.Context
-	db        *gorm.DB
+	mu         sync.RWMutex
+	providers  map[string]OAuthProvider
+	ctx        core.Context
+	db         *gorm.DB
+	lastReload time.Time // last DB reload attempt, for the miss throttle
+	reloadMu   sync.Mutex // serializes reloads so concurrent misses share one
 }
 
 // NewProviderStore creates an empty ProviderStore.
@@ -66,10 +75,10 @@ func (s *ProviderStore) LoadFromDB(db *gorm.DB) error {
 }
 
 // GetProvider returns the OAuthProvider for a provider identifier. On a miss it
-// falls back to reloading from the DB to self-heal: an admin mutation whose
-// cache reload failed (or a provider created elsewhere in a multi-instance
-// setup) would otherwise leave the login path reading a stale cache until the
-// next process restart.
+// falls back to a single-flight, throttled DB reload to self-heal: an admin
+// mutation whose cache reload failed (or a provider enabled elsewhere) is
+// picked up here without a process restart, while a burst of misses can only
+// trigger one reload per cooldown window rather than one DB read per request.
 func (s *ProviderStore) GetProvider(name string) (OAuthProvider, error) {
 	s.mu.RLock()
 	p, ok := s.providers[name]
@@ -78,11 +87,11 @@ func (s *ProviderStore) GetProvider(name string) (OAuthProvider, error) {
 	if ok {
 		return p, nil
 	}
+	if db == nil {
+		return nil, fmt.Errorf("provider %s not enabled", name)
+	}
 
-	if db != nil {
-		if err := s.LoadFromDB(db); err != nil {
-			return nil, err
-		}
+	if s.reloadIfDue(db) {
 		s.mu.RLock()
 		p, ok = s.providers[name]
 		s.mu.RUnlock()
@@ -92,6 +101,35 @@ func (s *ProviderStore) GetProvider(name string) (OAuthProvider, error) {
 	}
 
 	return nil, fmt.Errorf("provider %s not enabled", name)
+}
+
+// reloadIfDue performs a DB reload only when the cooldown window has elapsed.
+// reloadIfDue is the only reader/writer of lastReload, so reloadMu both
+// serializes concurrent callers (one reload serves them all — single-flight)
+// and guards the throttle field. Holding the lock across the check and the
+// reload keeps the whole section atomic. Both success and failure advance
+// lastReload so a flaky DB is not hammered on every subsequent request.
+func (s *ProviderStore) reloadIfDue(db *gorm.DB) bool {
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+
+	if time.Since(s.lastReload) < reloadCooldown {
+		return false
+	}
+
+	err := s.LoadFromDB(db)
+	s.lastReload = time.Now()
+	return err == nil
+}
+
+// EvictProvider removes a provider from the in-memory provider set regardless
+// of DB state. Callers use it after a delete/disable whose cache reload failed,
+// so a provider whose DB row is gone or disabled is never served on a cache
+// hit; the next lookup goes through the throttled miss reload instead.
+func (s *ProviderStore) EvictProvider(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.providers, name)
 }
 
 // EnabledProviders returns the list of enabled provider identifiers.

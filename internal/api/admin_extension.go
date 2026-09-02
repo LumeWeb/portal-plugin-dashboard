@@ -347,6 +347,18 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
+	// Resolve the provider id before deleting so the remember to evict it from
+	// the cache if the reload fails.
+	config, err := e.socialProvider.Get(reqCtx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			apiErr := NewError(ErrKeyProviderNotFound, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
+		apiErr := NewError(ErrKeyProviderFetchFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
 	// Hard-delete: provider config is ephemeral admin state with no audit or
 	// restore value. A soft-deleted row keeps holding the provider_id unique
 	// slot, so re-creating a deleted provider (a normal admin workflow) would
@@ -364,9 +376,10 @@ func (e *SocialAdminExtension) handleDeleteProvider(c echo.Context) error {
 	}
 
 	if err := e.refreshProviderStore(reqCtx); err != nil {
-		// Row is gone; only the in-memory cache is stale, and the next
-		// GetProvider miss self-heals it. Return 202 consistently with the
-		// other refresh-failure branches rather than a 500-class error body.
+		// Row is gone; only the in-memory cache is stale. Evict the provider so
+		// GetProvider cannot serve it on a cache hit, then return 202
+		// consistently with the other refresh-failure branches.
+		e.providerStore.EvictProvider(config.ProviderID)
 		return c.NoContent(http.StatusAccepted)
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -411,6 +424,12 @@ func (e *SocialAdminExtension) setProviderEnabled(c echo.Context, enabled bool) 
 	resp.FromModel(config)
 
 	if err := e.refreshProviderStore(reqCtx); err != nil {
+		if !enabled {
+			// Evict the disabled provider so it is not served on a cache hit
+			// while its DB row is disabled; the throttled miss reload picks up
+			// the change once it can run.
+			e.providerStore.EvictProvider(config.ProviderID)
+		}
 		return ctx.JSON(http.StatusAccepted, resp)
 	}
 	return ctx.JSON(http.StatusOK, resp)

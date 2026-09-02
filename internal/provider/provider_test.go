@@ -95,6 +95,40 @@ func TestProviderStore_LoadFromDB(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// A provider evicted after a failed delete/disable reload is not served on a
+// cache hit; the next lookup goes through the throttled miss reload and, when
+// the row is still enabled, is picked back up (self-heal).
+func TestProviderStore_EvictThenSelfHeal(t *testing.T) {
+	db := newTestDB(t)
+	seedProvider(t, db, &pluginDb.SocialProviderConfig{
+		ProviderID:  "google",
+		DisplayName: "Google",
+		ClientID:    "c1",
+		Enabled:     true,
+	})
+
+	store := NewProviderStore()
+	require.NoError(t, store.LoadFromDB(db))
+
+	// Trigger a reload so the miss-reload throttle deadline is advanced.
+	_, err := store.GetProvider("does-not-exist")
+	require.Error(t, err)
+
+	// Evict simulates a delete/disable whose cache reload failed. Within the
+	// cooldown window the throttled miss reload is skipped, so the evicted
+	// provider must not be served on a cache hit.
+	store.EvictProvider("google")
+	_, err = store.GetProvider("google")
+	assert.Error(t, err)
+
+	// Once the cooldown elapses, the throttled reload picks the still-enabled
+	// provider back up (self-heal).
+	require.Eventually(t, func() bool {
+		_, err := store.GetProvider("google")
+		return err == nil
+	}, 3*time.Second, reloadCooldown)
+}
+
 // newTestProvider builds a GenericOAuth2Provider pointing at mock endpoints.
 func newTestProvider(idKey, tokenURL, userURL string) *GenericOAuth2Provider {
 	return NewGenericOAuth2Provider(
