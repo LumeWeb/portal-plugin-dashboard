@@ -120,9 +120,14 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			if pluginCfg.SocialLogin.Enabled {
 				api.providerStore = provider.Provider()
 				api.providerStore.SetContext(ctx)
-				if err := api.providerStore.LoadFromDB(ctx.DB()); err != nil {
-					return err
-				}
+				// Deferred to boot completion: LoadFromDB resolves the
+				// callback URL through httpSvc.APISubdomain(), which reads the
+				// dashboard API component's context. That context is only set
+				// once the component has started, and this startup func runs
+				// before it, so loading here would panic on a nil context.
+				event.OnBootCompleted(ctx, func(ctx core.Context, _ context.Context) error {
+					return api.providerStore.LoadFromDB(ctx.DB())
+				})
 			}
 
 			return nil
