@@ -15,6 +15,26 @@ type SocialAccountResponse struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+// SocialAccountListResponse is a swagger-only DTO that represents the
+// paginated response for a user's linked social accounts. It mirrors the
+// generic queryutil.Response[[]SocialAccountResponse] produced by
+// queryutilHttp.ProcessListRequest for OpenAPI documentation.
+//
+// Note: This struct is only used for swagger documentation, not for actual
+// encoding.
+type SocialAccountListResponse struct {
+	Data  []SocialAccountResponse `json:"data"`
+	Total int64                   `json:"total"`
+}
+
+// PublicProviderResponse is the public metadata exposed for an enabled
+// social login provider. Secrets are never included.
+type PublicProviderResponse struct {
+	ProviderID  string `json:"provider_id"`
+	DisplayName string `json:"display_name"`
+	OrderIndex  int    `json:"order_index"`
+}
+
 // SocialLoginQuery binds the query parameters for the social login redirect.
 type SocialLoginQuery struct {
 	ReturnURL string `query:"return"`

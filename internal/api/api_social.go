@@ -12,9 +12,11 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/samber/lo"
 	"go.lumeweb.com/httputil"
 	mcontext "go.lumeweb.com/portal-middleware/context"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
+	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
@@ -22,13 +24,6 @@ import (
 	"go.lumeweb.com/queryutil"
 	queryutilHttp "go.lumeweb.com/queryutil/http"
 )
-
-// publicProvider is the public metadata exposed for an enabled provider.
-type publicProvider struct {
-	ProviderID  string `json:"provider_id"`
-	DisplayName string `json:"display_name"`
-	OrderIndex  int    `json:"order_index"`
-}
 
 // socialConsentPageData carries the data rendered into the link-consent page:
 // the provider a user wants to link and the email address the link resolves
@@ -69,6 +64,8 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			router.WithSwaggerOptions(
 				router.WithSummary("List available social login providers"),
 				router.WithDescription("Returns enabled social login providers for the login page. No authentication required."),
+				router.WithSuccessResponse(http.StatusOK, "Enabled social login providers",
+					router.WithJSONContent([]dto.PublicProviderResponse{})),
 			),
 		),
 		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider", a.socialAuthLogin,
@@ -100,6 +97,9 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			router.WithSwaggerOptions(
 				router.WithSummary("List linked social accounts"),
 				router.WithDescription("Returns the social login providers linked to the authenticated user's account."),
+				router.WithSuccessResponse(http.StatusOK, "Paginated list of linked social accounts",
+					router.WithJSONContent(dto.SocialAccountListResponse{}),
+					router.WithTotalCountHeader()),
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),
@@ -735,14 +735,13 @@ func (a *API) listPublicProviders(c echo.Context) error {
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	providers := make([]publicProvider, 0, len(configs))
-	for _, cfg := range configs {
-		providers = append(providers, publicProvider{
+	providers := lo.Map(configs, func(cfg *pluginDb.SocialProviderConfig, _ int) dto.PublicProviderResponse {
+		return dto.PublicProviderResponse{
 			ProviderID:  cfg.ProviderID,
 			DisplayName: cfg.DisplayName,
 			OrderIndex:  cfg.OrderIndex,
-		})
-	}
+		}
+	})
 
 	return c.JSON(http.StatusOK, providers)
 }
