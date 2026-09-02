@@ -15,6 +15,7 @@ type Themes []Theme
 type APIConfig struct {
 	Subdomain   string      `config:"subdomain"`
 	SocialLogin SocialLogin `config:"social_login"`
+	WalletLogin WalletLogin `config:"wallet_login"`
 	AppFolder   string      `config:"app_folder"`
 	Themes      Themes      `config:"themes"`
 	Branding    Branding    `config:"branding"`
@@ -22,9 +23,9 @@ type APIConfig struct {
 
 func (a APIConfig) Schema() z.ZogSchema {
 	return z.Struct(z.Shape{
-		"Subdomain":   z.String().Required(),
-		"AppFolder":   z.String(),
-		"Themes":      z.Slice(z.Struct(z.Shape{})).TestFunc(func(val any, ctx internals.Ctx) bool {
+		"Subdomain": z.String().Required(),
+		"AppFolder": z.String(),
+		"Themes": z.Slice(z.Struct(z.Shape{})).TestFunc(func(val any, ctx internals.Ctx) bool {
 			def := false
 			for _, theme := range reflect.ValueOf(val).Elem().Interface().(Themes) {
 				if theme.Default {
