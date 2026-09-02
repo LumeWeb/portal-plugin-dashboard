@@ -108,10 +108,13 @@ func (e *SocialAdminExtension) buildRoutes() []router.Route {
 		),
 		e.newRoute(http.MethodPut, "/api/social/providers/:id", e.handleUpdateProvider,
 			router.WithSummary("Update social login provider"),
-			router.WithDescription("Update an existing social login provider"),
+			router.WithDescription(
+			"Update an existing social login provider. Fields that are omitted " +
+				"are left unchanged, so the client secret can be omitted to keep " +
+				"the stored one."),
 			router.WithTags("social", "providers"),
 			router.WithPathParam("id", "Numeric ID of the provider", ""),
-			router.WithRequestBody(&dto.SocialProviderRequest{}, "Provider configuration", true),
+			router.WithRequestBody(&dto.SocialProviderUpdateRequest{}, "Provider fields to change (omitted fields are left unchanged)", true),
 			router.WithSuccessResponse(http.StatusOK, "Provider updated", router.WithJSONContent(&dto.SocialProviderResponse{})),
 		),
 		e.newRoute(http.MethodDelete, "/api/social/providers/:id", e.handleDeleteProvider,
@@ -263,8 +266,8 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	var req dto.SocialProviderRequest
-	_, ok := httputil.DecodeAndValidateRequest[*dto.SocialProviderRequest, *dto.SocialProviderRequest](ctx, &req)
+	var req dto.SocialProviderUpdateRequest
+	_, ok := httputil.DecodeAndValidateRequest[*dto.SocialProviderUpdateRequest, *dto.SocialProviderUpdateRequest](ctx, &req)
 	if !ok {
 		return nil
 	}
@@ -279,46 +282,9 @@ func (e *SocialAdminExtension) handleUpdateProvider(c echo.Context) error {
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	if req.ProviderID != "" {
-		config.ProviderID = req.ProviderID
-	}
-	if req.DisplayName != "" {
-		config.DisplayName = req.DisplayName
-	}
-	if req.ClientID != "" {
-		config.ClientID = req.ClientID
-	}
-	if req.ClientSecret != "" {
-		config.ClientSecret = req.ClientSecret
-	}
-	if req.AuthURL != "" {
-		config.AuthURL = req.AuthURL
-	}
-	if req.TokenURL != "" {
-		config.TokenURL = req.TokenURL
-	}
-	if req.UserURL != "" {
-		config.UserURL = req.UserURL
-	}
-	if req.UserIDKey != "" {
-		config.UserIDKey = req.UserIDKey
-	}
-	if req.UserEmailKey != "" {
-		config.UserEmailKey = req.UserEmailKey
-	}
-	if req.UserNameKey != "" {
-		config.UserNameKey = req.UserNameKey
-	}
-	if req.Enabled != nil {
-		config.Enabled = *req.Enabled
-	}
-	if req.OrderIndex != nil {
-		config.OrderIndex = *req.OrderIndex
-	}
-	if req.Scopes != nil {
-		if err := config.SetScopes(req.Scopes); err != nil {
-			return ctx.Error(err, http.StatusBadRequest)
-		}
+	if err := req.Apply(config); err != nil {
+		apiErr := NewError(ErrKeyInvalidRequest, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	if err := e.socialProvider.Update(reqCtx, config); err != nil {
