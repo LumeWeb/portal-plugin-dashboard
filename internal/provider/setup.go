@@ -126,7 +126,14 @@ func (s *ProviderStore) reloadIfDue(db *gorm.DB) bool {
 // of DB state. Callers use it after a delete/disable whose cache reload failed,
 // so a provider whose DB row is gone or disabled is never served on a cache
 // hit; the next lookup goes through the throttled miss reload instead.
+//
+// It holds reloadMu so it is serialized against reloadIfDue's single-flight
+// reload: an in-flight reload that read a pre-delete/pre-disable DB snapshot
+// cannot re-add the provider to the map after this eviction removes it.
 func (s *ProviderStore) EvictProvider(name string) {
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.providers, name)
