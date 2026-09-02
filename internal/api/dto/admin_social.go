@@ -53,6 +53,16 @@ type SocialProviderResponse struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// SocialProviderListResponse is a swagger-only DTO that represents the paginated
+// response for social providers. It mirrors the generic queryutil.Response[*dto.SocialProviderResponse]
+// produced by queryutilHttp.ProcessListRequest for OpenAPI documentation.
+//
+// Note: This struct is only used for swagger documentation, not for actual encoding.
+type SocialProviderListResponse struct {
+	Data  []SocialProviderResponse `json:"data"`
+	Total int64                    `json:"total"`
+}
+
 // FromModel populates the response from a provider config row.
 func (r *SocialProviderResponse) FromModel(m *pluginDb.SocialProviderConfig) {
 	r.ID = m.ID
