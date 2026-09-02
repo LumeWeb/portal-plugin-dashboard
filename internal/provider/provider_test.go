@@ -227,6 +227,45 @@ func TestGenericOAuth2Provider_Exchange_MissingEmailVerified(t *testing.T) {
 	assert.False(t, user.EmailVerified)
 }
 
+// Only an explicit JSON boolean true verification counts: a provider emitting a
+// non-standard truthy string/number ("true", 1) must NOT auto-verify the email.
+func TestGenericOAuth2Provider_Exchange_NonBooleanEmailVerifiedNotVerified(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sub":"abc123","email":"u@example.com","email_verified":"true"}`))
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	user, err := p.Exchange(t.Context(), "code", "verifier")
+	require.NoError(t, err)
+	assert.False(t, user.EmailVerified)
+}
+
+// Numeric truthy (1) must not auto-verify either; JSON booleans only.
+func TestGenericOAuth2Provider_Exchange_NumericEmailVerifiedNotVerified(t *testing.T) {
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sub":"abc123","email":"u@example.com","email_verified":1}`))
+	}))
+	defer userSrv.Close()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+
+	p := newTestProvider("sub", tokenSrv.URL, userSrv.URL)
+	user, err := p.Exchange(t.Context(), "code", "verifier")
+	require.NoError(t, err)
+	assert.False(t, user.EmailVerified)
+}
+
 // Nesting is resolved via dot-notation (koanf), e.g. id at "data.id".
 func TestGenericOAuth2Provider_Exchange_NestedKeys(t *testing.T) {
 	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

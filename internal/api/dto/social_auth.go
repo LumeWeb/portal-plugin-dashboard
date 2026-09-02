@@ -41,3 +41,10 @@ var _ httputil.DTORequest[*SocialCallbackQuery] = (*SocialCallbackQuery)(nil)
 func (q *SocialCallbackQuery) ToModel() (*SocialCallbackQuery, error) {
 	return q, nil
 }
+
+// SocialConsentResponse is the JSON body returned by the consent page
+// approve/reject endpoint. It carries the redirect URI the page JS navigates
+// to after the user decides.
+type SocialConsentResponse struct {
+	RedirectURI string `json:"redirect_uri"`
+}

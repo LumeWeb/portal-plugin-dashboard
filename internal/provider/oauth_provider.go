@@ -23,4 +23,8 @@ type OAuthProvider interface {
 
 	// Name returns the provider identifier (e.g. "google").
 	Name() string
+
+	// DisplayName returns the user-facing provider name (e.g. "Google"). It
+	// falls back to the provider identifier when no display name is configured.
+	DisplayName() string
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -13,6 +14,7 @@ import (
 	"go.lumeweb.com/httputil"
 	mcontext "go.lumeweb.com/portal-middleware/context"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
 	"go.lumeweb.com/portal/core"
@@ -172,7 +174,9 @@ func TestFinishSocialLogin_UnverifiedEmailConflictRejected(t *testing.T) {
 	}, socialTestOptions)
 }
 
-func TestFinishSocialLogin_VerifiedEmailConflictAutoLinks(t *testing.T) {
+// A verified email that already belongs to a user must NOT be linked silently:
+// the flow redirects to the consent page, and no LinkAccount happens yet.
+func TestFinishSocialLogin_VerifiedEmailConflictRedirectsToConsent(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		api, socialSvc := socialTestAPI(ctx)
 		userSvc := coreTesting.GetMockUserService(ctx)
@@ -182,17 +186,36 @@ func TestFinishSocialLogin_VerifiedEmailConflictAutoLinks(t *testing.T) {
 		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-3", "taken@example.com", true).
 			Return(nil, core.NewAccountError(core.ErrKeySocialEmailConflict, nil))
 		userSvc.EXPECT().EmailExists(mock.Anything, "taken@example.com").Return(true, existing, nil)
-		socialSvc.EXPECT().LinkAccount(mock.Anything, uint(12), "google", "uid-3", "taken@example.com").Return(nil)
 
-		loginToken := CreateTestLoginToken(tb, ctx, "12")
-		authSvc.EXPECT().LoginID(mock.Anything, uint(12), mock.Anything, false).Return(loginToken, nil)
+		reqCtx, w := newSocialTestContext(t)
+		err := api.finishSocialLogin(reqCtx, "google",
+			&provider.OAuth2User{ProviderUserID: "uid-3", Email: "taken@example.com", EmailVerified: true}, "/dashboard")
+		require.NoError(tb, err)
+		require.Equal(tb, http.StatusFound, w.Code)
+		require.Equal(tb, "/api/account/auth/sso/google/consent", w.Header().Get("Location"))
+		// Nothing is linked and no session is established without consent.
+		socialSvc.AssertNotCalled(tb, "LinkAccount")
+		authSvc.AssertNotCalled(tb, "LoginID")
+	}, socialTestOptions)
+}
+
+// Prompting consent requires the email to still belong to an existing account;
+// a stale conflict keeps the original rejection.
+func TestFinishSocialLogin_ConsentPromptEmailGone(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
+
+		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-3", "taken@example.com", true).
+			Return(nil, core.NewAccountError(core.ErrKeySocialEmailConflict, nil))
+		userSvc.EXPECT().EmailExists(mock.Anything, "taken@example.com").Return(false, nil, nil)
 
 		reqCtx, w := newSocialTestContext(t)
 		err := api.finishSocialLogin(reqCtx, "google",
 			&provider.OAuth2User{ProviderUserID: "uid-3", Email: "taken@example.com", EmailVerified: true}, "/")
-		require.NoError(tb, err)
-		require.Equal(tb, http.StatusFound, w.Code)
-		require.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
+		require.Error(tb, err)
+		require.Equal(tb, http.StatusConflict, w.Code)
+		socialSvc.AssertNotCalled(tb, "LinkAccount")
 	}, socialTestOptions)
 }
 
@@ -402,4 +425,211 @@ func TestSocialAuthLogin_DefaultsReturnURL(t *testing.T) {
 		require.Equal(tb, http.StatusFound, w.Code)
 		require.Contains(tb, w.Header().Get("Location"), "https://")
 	}, socialTestOptions)
+}
+
+// A valid consent session renders the consent page with the provider name and
+// the email the link resolves to.
+func TestSocialConsentPage_Renders(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		// Serve a provider so the page can resolve its display name.
+		store := provider.Provider()
+		store.SetContext(ctx)
+		require.NoError(tb, store.LoadFromDB(seedProviderDB(tb, "http://token.invalid", "http://user.invalid")))
+		api.providerStore = store
+
+		consentSession(tb, api, provider.SocialAuthSession{
+			Mode:           provider.SessionModeConsentLink,
+			ReturnURL:      "/dashboard",
+			ProviderName:   "google",
+			ProviderUserID: "uid-3",
+			Email:          "taken@example.com",
+		}, func(cookies []*http.Cookie) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google/consent", nil)
+			for _, ck := range cookies {
+				req.AddCookie(ck)
+			}
+			w := httptest.NewRecorder()
+			echoCtx := e.NewContext(req, w)
+			echoCtx.SetParamNames("provider")
+			echoCtx.SetParamValues("google")
+
+			require.NoError(tb, api.socialConsentPage(echoCtx))
+			require.Equal(tb, http.StatusOK, w.Code)
+			body := w.Body.String()
+			require.Contains(tb, body, "Link Google to your account?")
+			require.Contains(tb, body, "taken@example.com")
+			require.Contains(tb, body, "data-action=\"approve\"")
+			// The provider user id / session state must never be rendered.
+			require.NotContains(tb, body, "uid-3")
+		})
+	}, socialTestOptions)
+}
+
+// Without a valid consent session the consent page redirects home and renders
+// nothing.
+func TestSocialConsentPage_NoSessionRedirectsHome(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google/consent", nil)
+		w := httptest.NewRecorder()
+		echoCtx := e.NewContext(req, w)
+
+		require.NoError(tb, api.socialConsentPage(echoCtx))
+		require.Equal(tb, http.StatusFound, w.Code)
+		require.Equal(tb, "/", w.Header().Get("Location"))
+		require.Empty(tb, w.Body.String())
+	}, socialTestOptions)
+}
+
+// Approving the consent links the pending identity to the account that holds
+// the email and returns the auth-complete redirect URI as JSON.
+func TestSocialConsentSubmit_Approve(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+
+		existing := &models.User{Model: gorm.Model{ID: 12}, Email: "taken@example.com"}
+		userSvc.EXPECT().EmailExists(mock.Anything, "taken@example.com").Return(true, existing, nil)
+		socialSvc.EXPECT().LinkAccount(mock.Anything, uint(12), "google", "uid-3", "taken@example.com").Return(nil)
+		loginToken := CreateTestLoginToken(tb, ctx, "12")
+		authSvc.EXPECT().LoginID(mock.Anything, uint(12), mock.Anything, false).Return(loginToken, nil)
+
+		consentSession(tb, api, provider.SocialAuthSession{
+			Mode:           provider.SessionModeConsentLink,
+			ReturnURL:      "/dashboard",
+			ProviderName:   "google",
+			ProviderUserID: "uid-3",
+			Email:          "taken@example.com",
+		}, func(cookies []*http.Cookie) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent",
+				strings.NewReader(`{"approve":true}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Origin", "https://example.com")
+			for _, ck := range cookies {
+				req.AddCookie(ck)
+			}
+			w := httptest.NewRecorder()
+			echoCtx := e.NewContext(req, w)
+
+			require.NoError(tb, api.socialConsentSubmit(echoCtx))
+			require.Equal(tb, http.StatusOK, w.Code)
+			var resp dto.SocialConsentResponse
+			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
+			require.Contains(tb, resp.RedirectURI, "/api/auth/complete")
+		})
+	}, socialTestOptions)
+}
+
+// Rejecting the consent clears the pending session and sends the user home.
+func TestSocialConsentSubmit_Reject(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
+
+		consentSession(tb, api, provider.SocialAuthSession{
+			Mode:           provider.SessionModeConsentLink,
+			ReturnURL:      "/dashboard",
+			ProviderName:   "google",
+			ProviderUserID: "uid-3",
+			Email:          "taken@example.com",
+		}, func(cookies []*http.Cookie) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent",
+				strings.NewReader(`{"approve":false}`))
+			req.Header.Set("Content-Type", "application/json")
+			for _, ck := range cookies {
+				req.AddCookie(ck)
+			}
+			w := httptest.NewRecorder()
+			echoCtx := e.NewContext(req, w)
+
+			require.NoError(tb, api.socialConsentSubmit(echoCtx))
+			require.Equal(tb, http.StatusOK, w.Code)
+			var resp dto.SocialConsentResponse
+			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
+			require.Equal(tb, "/", resp.RedirectURI)
+			// Nothing linked or logged in on reject.
+			userSvc.AssertNotCalled(tb, "EmailExists")
+			socialSvc.AssertNotCalled(tb, "LinkAccount")
+		})
+	}, socialTestOptions)
+}
+
+// A stale or forged consent session cannot link anything: the pending cookie is
+// cleared and the response points home.
+func TestSocialConsentSubmit_NoSession(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent",
+			strings.NewReader(`{"approve":true}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		echoCtx := e.NewContext(req, w)
+
+		require.NoError(tb, api.socialConsentSubmit(echoCtx))
+		require.Equal(tb, http.StatusBadRequest, w.Code)
+		var resp dto.SocialConsentResponse
+		require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Equal(tb, "/", resp.RedirectURI)
+		socialSvc.AssertNotCalled(tb, "LinkAccount")
+		userSvc.AssertNotCalled(tb, "EmailExists")
+	}, socialTestOptions)
+}
+
+// If the email no longer belongs to an account by the time the user approves,
+// nothing is linked and the response points home.
+func TestSocialConsentSubmit_EmailGone(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		userSvc := coreTesting.GetMockUserService(ctx)
+
+		userSvc.EXPECT().EmailExists(mock.Anything, "taken@example.com").Return(false, nil, nil)
+
+		consentSession(tb, api, provider.SocialAuthSession{
+			Mode:           provider.SessionModeConsentLink,
+			ProviderName:   "google",
+			ProviderUserID: "uid-3",
+			Email:          "taken@example.com",
+		}, func(cookies []*http.Cookie) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent",
+				strings.NewReader(`{"approve":true}`))
+			req.Header.Set("Content-Type", "application/json")
+			for _, ck := range cookies {
+				req.AddCookie(ck)
+			}
+			w := httptest.NewRecorder()
+			echoCtx := e.NewContext(req, w)
+
+			require.NoError(tb, api.socialConsentSubmit(echoCtx))
+			require.Equal(tb, http.StatusBadRequest, w.Code)
+			var resp dto.SocialConsentResponse
+			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
+			require.Equal(tb, "/", resp.RedirectURI)
+			socialSvc.AssertNotCalled(tb, "LinkAccount")
+		})
+	}, socialTestOptions)
+}
+
+// consentSession writes a consent-mode session cookie and invokes the callback
+// with the resulting cookies, mirroring the redirect the browser would carry.
+func consentSession(tb testing.TB, api *API, session provider.SocialAuthSession, fn func([]*http.Cookie)) {
+	tb.Helper()
+	key, err := api.socialSessionKey()
+	require.NoError(tb, err)
+	cookW := httptest.NewRecorder()
+	require.NoError(tb, provider.SaveSession(cookW, &session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
+	cookies := cookW.Result().Cookies()
+	require.Len(tb, cookies, 1)
+	fn(cookies)
 }

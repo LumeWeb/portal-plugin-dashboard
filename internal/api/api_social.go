@@ -3,10 +3,14 @@ package api
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -24,6 +28,39 @@ type publicProvider struct {
 	ProviderID  string `json:"provider_id"`
 	DisplayName string `json:"display_name"`
 	OrderIndex  int    `json:"order_index"`
+}
+
+// socialConsentPageData carries the data rendered into the link-consent page:
+// the provider a user wants to link and the email address the link resolves
+// to. The provider user id and session state are never rendered; they live in
+// the HMAC-signed consent session.
+type socialConsentPageData struct {
+	ProviderName string
+	Email        string
+}
+
+// socialLayoutData is the shared layout wrapper for the embedded HTML
+// templates, mirroring the portal-plugin-mcp consent page.
+type socialLayoutData struct {
+	AriaLabelledBy  string
+	AriaDescribedBy string
+	MetaDescription string
+	PageData        any
+}
+
+//go:embed social_layout.html
+var socialLayoutHTML string
+
+//go:embed social_consent.html
+var socialConsentHTML string
+
+var socialConsentTemplate *template.Template
+
+func init() {
+	socialConsentTemplate = template.Must(template.New("social-consent").
+		Parse(socialLayoutHTML))
+	template.Must(socialConsentTemplate.New("page").Parse(socialConsentHTML))
+	template.Must(socialConsentTemplate.Parse(`{{define "consent"}}{{template "layout" .}}{{end}}`))
 }
 
 func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []router.Route {
@@ -87,6 +124,26 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			),
 			router.WithAccess(core.ACCESS_USER_ROLE),
 			router.WithMiddlewares(authMw, accessMw),
+		),
+		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider/consent", a.socialConsentPage,
+			router.WithSwaggerOptions(
+				router.WithSummary("Show social link consent page"),
+				router.WithDescription("Renders the consent page when a verified social login email matches an existing account. The page asks the user to approve linking the provider identity to that account before any link is created."),
+				router.WithPathParam("provider", "The social login provider (e.g., google, github)", "google"),
+				router.WithSuccessResponse(http.StatusOK, "Consent page (text/html)"),
+			),
+		),
+		router.NewRoute(http.MethodPost, "/api/account/auth/sso/:provider/consent", a.socialConsentSubmit,
+			router.WithSwaggerOptions(
+				router.WithSummary("Approve or reject social link consent"),
+				router.WithDescription("Approves or rejects linking the pending provider identity to the existing account. Called by the consent page. Returns the redirect URI to navigate to."),
+				router.WithPathParam("provider", "The social login provider (e.g., google, github)", "google"),
+				router.WithRequestBody(struct {
+					Approve bool `json:"approve"`
+				}{}, "Approval decision", true),
+				router.WithSuccessResponse(http.StatusOK, "Redirect URI", router.WithJSONContent(dto.SocialConsentResponse{})),
+			),
+			router.WithMiddlewares(a.verifySameOrigin()),
 		),
 	}
 }
@@ -373,16 +430,16 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 	)
 	if err != nil {
 		// A verified email that already belongs to a user means the person owns
-		// both identities: link the SSO identity to the existing account and log
-		// them in. Unverified emails keep the conflict rejection.
+		// both identities. The identity is NOT linked silently: the user must
+		// confirm on a consent page first (a provider misreporting email
+		// verification must not let anyone take over an existing account).
+		// Unverified emails keep the conflict rejection.
 		if user.EmailVerified && core.IsAccountError(err) &&
 			core.AsAccountError(err).IsErrorType(core.ErrKeySocialEmailConflict) {
-			userId, ok, linkErr := a.autoLinkOnVerifiedConflict(ctx, providerName, user)
-			if linkErr != nil {
-				return a.socialError(ctx, linkErr)
-			}
-			if ok {
-				return a.loginAndRedirect(ctx, userId, returnUrl)
+			if ok, promptErr := a.promptLinkConsent(ctx, providerName, user, returnUrl); promptErr != nil {
+				return a.socialError(ctx, promptErr)
+			} else if ok {
+				return nil
 			}
 		}
 		return a.socialError(ctx, err)
@@ -401,34 +458,199 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 	return a.loginAndRedirect(ctx, result.User.ID, returnUrl)
 }
 
-// autoLinkOnVerifiedConflict links the SSO identity to the existing account
-// that already holds the email and returns that account's id. It is only safe
-// because it runs after the provider confirmed the email. A lookup failure
-// falls through (ok=false) so the caller keeps the original conflict error.
-func (a *API) autoLinkOnVerifiedConflict(ctx httputil.RequestContext, providerName string, user *provider.OAuth2User) (uint, bool, error) {
-	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), user.Email)
+// promptLinkConsent handles a verified-email conflict during login by parking
+// the provider identity in a signed consent session and redirecting to the
+// consent page. No account link happens until the user approves. The conflict
+// is re-verified against the current account for that email; ok=false falls
+// through so the caller keeps the original conflict error.
+func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string, user *provider.OAuth2User, returnUrl string) (bool, error) {
+	exists, _, err := a.user.EmailExists(ctx.Request().Context(), user.Email)
 	if err != nil || !exists {
-		return 0, false, nil
+		return false, nil
 	}
 
-	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), existing.ID, providerName, user.ProviderUserID, user.Email); err != nil {
-		return 0, false, err
+	key, err := a.socialSessionKey()
+	if err != nil {
+		return false, ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	return existing.ID, true, nil
+	session := &provider.SocialAuthSession{
+		Mode:           provider.SessionModeConsentLink,
+		ReturnURL:      returnUrl,
+		ProviderName:   providerName,
+		ProviderUserID: user.ProviderUserID,
+		Email:          user.Email,
+	}
+	if err := provider.SaveSession(ctx.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
+		return false, ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	http.Redirect(ctx.Response(), ctx.Request(), socialConsentPath(providerName), http.StatusFound)
+	return true, nil
+}
+
+// socialConsentPage renders the link-consent page. The consent-mode session
+// cookie is the credential: it is HMAC-signed, single-use, and short-lived, so
+// the page only renders for a real, in-flight identity merge. A missing or
+// mismatched session redirects home.
+func (a *API) socialConsentPage(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+	session, err := provider.GetSession(c.Request(), key)
+	if err != nil || session.Mode != provider.SessionModeConsentLink ||
+		session.ProviderName == "" || session.ProviderUserID == "" || session.Email == "" {
+		return c.Redirect(http.StatusFound, "/")
+	}
+
+	displayName := a.providerDisplayName(ctx, session.ProviderName)
+	// Content-Type must be set before ExecuteTemplate writes the body.
+	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+	return socialConsentTemplate.ExecuteTemplate(c.Response().Writer, "consent", socialLayoutData{
+		AriaLabelledBy:  "consent-heading",
+		AriaDescribedBy: "consent-description",
+		MetaDescription: "Link your social account",
+		PageData: socialConsentPageData{
+			ProviderName: displayName,
+			Email:        session.Email,
+		},
+	})
+}
+
+// socialConsentSubmit processes the consent page approve/reject. The POST is
+// guarded against CSRF by a same-origin check; the browser's consent page
+// submits with a same-origin fetch, so a genuine approval always carries a
+// matching Origin. On approve the identity is linked to the account that
+// currently holds the email and the user is logged in; on reject the pending
+// session is cleared. Both cases return the next redirect URI as JSON.
+func (a *API) socialConsentSubmit(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	var body struct {
+		Approve bool `json:"approve"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return ctx.Error(errors.New("invalid request body"), http.StatusBadRequest)
+	}
+
+	key, err := a.socialSessionKey()
+	if err != nil {
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+	session, err := provider.GetSession(c.Request(), key)
+	if err != nil || session.Mode != provider.SessionModeConsentLink ||
+		session.ProviderName == "" || session.ProviderUserID == "" || session.Email == "" {
+		// Expired or forged consent: clear whatever cookie is present and send
+		// the user home rather than linking anything.
+		provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
+		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
+	}
+	// Single-use: the pending identity cannot be approved twice.
+	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
+
+	if !body.Approve {
+		return c.JSON(http.StatusOK, dto.SocialConsentResponse{RedirectURI: "/"})
+	}
+
+	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), session.Email)
+	if err != nil || !exists {
+		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
+	}
+
+	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), existing.ID, session.ProviderName, session.ProviderUserID, session.Email); err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			return ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+		return ctx.Error(err, http.StatusInternalServerError)
+	}
+
+	redirectURI, err := a.loginRedirectURI(ctx, existing.ID, session.ReturnURL)
+	if err != nil {
+		return a.socialError(ctx, err)
+	}
+
+	return c.JSON(http.StatusOK, dto.SocialConsentResponse{RedirectURI: redirectURI})
+}
+
+// providerDisplayName returns the user-facing name for a provider, falling back
+// to the provider identifier when it is not enabled or has no display name.
+func (a *API) providerDisplayName(ctx httputil.RequestContext, providerName string) string {
+	if a.providerStore == nil {
+		return providerName
+	}
+	p, err := a.providerStore.GetProvider(providerName)
+	if err != nil {
+		return providerName
+	}
+	return p.DisplayName()
+}
+
+// verifySameOrigin guards the consent POST against CSRF. The consent page
+// submits with a same-origin fetch carrying credentials, so a genuine approval
+// always has an Origin matching this host. A cross-site request cannot set the
+// Origin header to the victim's host.
+func (a *API) verifySameOrigin() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			origin := c.Request().Header.Get("Origin")
+			if origin != "" && !sameOriginHost(a.Config().Config().Core.Domain, origin) {
+				return echo.NewHTTPError(http.StatusForbidden, "cross-origin request rejected")
+			}
+			return next(c)
+		}
+	}
+}
+
+// sameOriginHost reports whether origin matches the configured domain. The
+// Origin header is always absolute (scheme://host); the domain may not carry a
+// scheme. Scheme is compared only when both are present.
+func sameOriginHost(domain, origin string) bool {
+	o, err := url.Parse(origin)
+	if err != nil || o.Host == "" {
+		return false
+	}
+	if strings.Contains(domain, "://") {
+		d, err := url.Parse(domain)
+		if err != nil {
+			return false
+		}
+		return d.Hostname() == o.Hostname()
+	}
+	return domain == o.Hostname()
+}
+
+// loginRedirectURI establishes a session for the user and returns the
+// auth-complete URL to navigate to. It does not write a response, so callers
+// can either redirect (browser navigation) or return the URL as JSON.
+func (a *API) loginRedirectURI(ctx httputil.RequestContext, userID uint, returnUrl string) (string, error) {
+	_jwt, err := a.auth.LoginID(ctx.Request().Context(), userID, ctx.RealIP(), false)
+	if err != nil {
+		return "", err
+	}
+
+	return a.buildAuthCompleteURL(_jwt, returnUrl), nil
 }
 
 // loginAndRedirect establishes a session for the user and redirects to the
 // auth-complete endpoint.
 func (a *API) loginAndRedirect(ctx httputil.RequestContext, userID uint, returnUrl string) error {
-	_jwt, err := a.auth.LoginID(ctx.Request().Context(), userID, ctx.RealIP(), false)
+	redirectURL, err := a.loginRedirectURI(ctx, userID, returnUrl)
 	if err != nil {
 		return a.socialError(ctx, err)
 	}
 
-	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
 	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
 	return nil
+}
+
+// socialConsentPath is the consent page path for a provider, relative to the
+// API subdomain both the callback and the consent page are served from.
+func socialConsentPath(providerName string) string {
+	return fmt.Sprintf("/api/account/auth/sso/%s/consent", providerName)
 }
 
 // socialError maps an account error to its HTTP status, else a 500.

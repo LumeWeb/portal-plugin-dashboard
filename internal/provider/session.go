@@ -23,10 +23,12 @@ const (
 	SessionMaxAge = 5 * time.Minute
 )
 
-// Session modes distinguishing a login redirect from an authenticated link.
+// Session modes distinguishing a login redirect from an authenticated link and
+// from a pending verified-email link awaiting user consent.
 const (
-	SessionModeLogin = "login"
-	SessionModeLink  = "link"
+	SessionModeLogin       = "login"
+	SessionModeLink        = "link"
+	SessionModeConsentLink = "consent_link"
 )
 
 // SocialAuthSession is the minimal state held between the login redirect and
@@ -35,11 +37,17 @@ type SocialAuthSession struct {
 	State        string `json:"state"`
 	CodeVerifier string `json:"code_verifier"`
 	ReturnURL    string `json:"return_url"`
-	// Mode distinguishes login vs link. Empty defaults to login.
+	// Mode distinguishes login vs link vs consent link. Empty defaults to login.
 	Mode string `json:"mode,omitempty"`
 	// UserID is set for link mode: the authenticated user the provider is being
 	// linked to.
 	UserID uint `json:"user_id,omitempty"`
+	// ProviderName, ProviderUserID, and Email carry the provider identity that
+	// is awaiting user consent before it is linked into an existing account
+	// (consent_link mode, entered from a login email-conflict).
+	ProviderName   string `json:"provider_name,omitempty"`
+	ProviderUserID string `json:"provider_user_id,omitempty"`
+	Email          string `json:"email,omitempty"`
 }
 
 // SaveSession signs the session and stores it as a cookie.

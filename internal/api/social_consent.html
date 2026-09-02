@@ -1,0 +1,230 @@
+{{define "page-title"}}Link social account — {{.ProviderName}}{{end}}
+
+{{define "page-content"}}
+<style>
+  /* ---- design tokens (tailwind-flavoured, no full lib) ---- */
+  /* Scoped to the consent wrapper, mirroring the mcp landing page. */
+  #consent-form {
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+
+    --c-card:      var(--color-card);
+    --c-border:    var(--color-borders);
+    --c-accent:    var(--color-accent);
+    --c-accent-br: var(--color-accent-bright);
+    --c-hi:        var(--color-high-contrast-text);
+    --c-low:       var(--color-low-contrast-text);
+    --c-muted:     var(--color-muted-text);
+    --c-subtle:    var(--color-text-subtle);
+  }
+
+  /* ---- layout ---- */
+  .flex         { display: flex; }
+  .flex-col     { flex-direction: column; }
+  .inline-flex  { display: inline-flex; }
+  .items-center { align-items: center; }
+  .items-start  { align-items: flex-start; }
+  .justify-between { justify-content: space-between; }
+  .justify-center  { justify-content: center; }
+  .flex-1  { flex: 1 1 0%; }
+  .shrink-0 { flex-shrink: 0; }
+  .w-full  { width: 100%; }
+  .min-w-0 { min-width: 0; }
+  .break-all     { word-break: break-all; }
+  .whitespace-nowrap { white-space: nowrap; }
+
+  /* ---- spacing (tailwind scale) ---- */
+  .gap-1   { gap: var(--space-1); }
+  .gap-1\.5 { gap: 0.375rem; }
+  .gap-2   { gap: var(--space-2); }
+  .gap-2\.5 { gap: 0.625rem; }
+  .gap-3   { gap: var(--space-3); }
+  .gap-3\.5 { gap: 0.875rem; }
+  .gap-4   { gap: var(--space-4); }
+  .gap-5   { gap: var(--space-5); }
+
+  .mt-1   { margin-top: var(--space-1); }
+  .mb-1   { margin-bottom: var(--space-1); }
+  .pb-2   { padding-bottom: var(--space-2); }
+  .pb-4   { padding-bottom: var(--space-4); }
+  .pt-1   { padding-top: var(--space-1); }
+  .pt-2   { padding-top: var(--space-2); }
+
+  .px-2\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
+  .px-3    { padding-left: var(--space-3); padding-right: var(--space-3); }
+  .px-4    { padding-left: var(--space-4); padding-right: var(--space-4); }
+  .px-5    { padding-left: var(--space-5); padding-right: var(--space-5); }
+  .py-1    { padding-top: var(--space-1); padding-bottom: var(--space-1); }
+  .py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+  .py-5    { padding-top: var(--space-5); padding-bottom: var(--space-5); }
+  .pl-4    { padding-left: var(--space-4); }
+
+  /* ---- typography ---- */
+  .text-xs  { font-size: 0.75rem; }
+  .text-sm  { font-size: 0.875rem; }
+  .text-base { font-size: 1rem; }
+  .font-medium   { font-weight: 500; }
+  .font-semibold { font-weight: 600; }
+  .font-bold     { font-weight: 700; }
+  .font-mono     { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .leading-none    { line-height: 1; }
+  .leading-relaxed { line-height: 1.6; }
+  .uppercase     { text-transform: uppercase; }
+  .tracking-wider { letter-spacing: 0.08em; }
+
+  /* ---- colours ---- */
+  .text-hi     { color: var(--c-hi); }
+  .text-low    { color: var(--c-low); }
+  .text-muted  { color: var(--c-muted); }
+  .text-subtle { color: var(--c-subtle); }
+  .text-accent { color: var(--c-accent-br); }
+  .bg-card   { background-color: var(--c-card); }
+  .bg-accent { background-color: var(--c-accent-br); }
+  .bg-border { background-color: var(--c-border); }
+  .border-border { border-color: var(--c-border); }
+  .border-accent { border-color: var(--c-accent); }
+
+  /* ---- borders / radius ---- */
+  .border { border: 1px solid currentColor; }
+  .rounded { border-radius: var(--radius); }
+  .rounded-full { border-radius: 999px; }
+
+  /* ---- hover ---- */
+  .hover\:underline:hover     { text-decoration: underline; }
+  .hover\:text-accent:hover   { color: var(--c-accent-br); }
+  .hover\:border-accent:hover { border-color: var(--c-accent); }
+
+  .hidden { display: none !important; }
+
+  /* Summary chip: which provider identity maps to which account email. */
+  .summary-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.875rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--color-borders);
+    background-color: var(--color-card);
+  }
+</style>
+
+<div id="consent-form" class="flex flex-col gap-5">
+  <div class="app-header">
+    <div class="app-logo">
+      <svg class="app-logo-placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"></path>
+        <circle cx="9" cy="7" r="4"></circle>
+        <path d="M22 21v-2a4 4 0 00-3-3.87"></path>
+        <path d="M16 3.13a4 4 0 010 7.75"></path>
+      </svg>
+    </div>
+    <h1 class="app-name" id="consent-heading">Link {{.ProviderName}} to your account?</h1>
+    <p class="app-description" id="consent-description">Sign in with {{.ProviderName}} and connect it to an existing account that uses the same email.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="flex flex-col gap-4">
+    <div class="summary-chip">
+      <span class="text-xs uppercase tracking-wider text-subtle">You'll sign in as</span>
+      <span class="flex-1 break-all text-base font-semibold text-hi leading-relaxed">{{.Email}}</span>
+      <span class="text-xs text-muted leading-relaxed">{{.ProviderName}} verified this email address.</span>
+    </div>
+    <p class="helper-text text-muted">Signing in links your {{.ProviderName}} identity to this account so you can log in with {{.ProviderName}} in the future. You can unlink it anytime from account settings.</p>
+  </div>
+
+  <div id="error-container" class="error-message" role="alert" aria-live="polite"></div>
+
+  <div class="actions flex flex-col gap-2.5">
+    <button type="button" class="btn btn-primary" data-action="approve" aria-label="Link account and sign in">Link account &amp; sign in</button>
+    <button type="button" class="btn btn-destructive" data-action="reject" aria-label="Cancel linking">Cancel</button>
+  </div>
+</div>
+
+<div id="result" class="result" role="status" aria-live="polite">
+  <div id="result-icon" class="result-icon" aria-hidden="true">
+    <svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="var(--color-solid-background)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    <svg class="icon-x" viewBox="0 0 24 24" fill="none" stroke="var(--color-destructive)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+  </div>
+  <h2 id="result-title" class="result-title"></h2>
+  <p id="result-description" class="result-description"></p>
+</div>
+
+<script>
+  (function() {
+    var OUTCOMES = {
+      approve: { icon: "icon-approved", title: "Account linked", desc: "Signing you in…", loading: "Linking…" },
+      reject:  { icon: "icon-rejected", title: "Not linked", desc: "You can close this window.", loading: "Canceling…" }
+    };
+
+    var redirectUri = "";
+    var form = document.getElementById("consent-form");
+    var result = document.getElementById("result");
+    var resultIcon = document.getElementById("result-icon");
+    var resultTitle = document.getElementById("result-title");
+    var resultDesc = document.getElementById("result-description");
+    var errorContainer = document.getElementById("error-container");
+    var buttons = form.querySelectorAll('[data-action]');
+
+    function setError(message) {
+      errorContainer.textContent = message;
+      errorContainer.classList.toggle("visible", !!message);
+    }
+
+    function setLoading(loading) {
+      buttons.forEach(function(btn) { btn.disabled = loading; });
+      if (loading) setError("");
+    }
+
+    function showResult(key) {
+      var outcome = OUTCOMES[key];
+      form.style.display = "none";
+      resultIcon.className = "result-icon " + outcome.icon;
+      resultTitle.textContent = outcome.title;
+      resultDesc.textContent = outcome.desc;
+      result.classList.add("visible");
+      if (redirectUri) { setTimeout(function() { window.location.href = redirectUri; }, 1000); }
+    }
+
+    function submit(approve) {
+      var key = approve ? "approve" : "reject";
+      var outcome = OUTCOMES[key];
+      var btn = form.querySelector('[data-action="' + key + '"]');
+      var originalText = btn.textContent;
+      setLoading(true);
+      btn.textContent = outcome.loading;
+
+      fetch(window.location.href, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approve: approve }),
+        credentials: "same-origin"
+      })
+      .then(function(response) {
+        return response.json().then(function(data) {
+          if (response.status !== 200) { throw new Error(data.error || data.message || "An unexpected error occurred."); }
+          return data;
+        });
+      })
+      .then(function(data) {
+        redirectUri = data.redirect_uri || "";
+        showResult(key);
+      })
+      .catch(function(err) {
+        setError(err.message || "Failed to process request. Please try again.");
+        btn.textContent = originalText;
+        setLoading(false);
+      });
+    }
+
+    buttons.forEach(function(btn) {
+      btn.addEventListener("click", function() { submit(btn.dataset.action === "approve"); });
+    });
+  })();
+</script>
+{{end}}

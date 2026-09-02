@@ -23,12 +23,13 @@ func (mapProvider) ReadBytes() ([]byte, error) {
 // GenericOAuth2Provider implements OAuthProvider using golang.org/x/oauth2
 // with config-driven endpoints and user-info field mapping.
 type GenericOAuth2Provider struct {
-	name     string
-	config   *oauth2.Config
-	userURL  string
-	emailKey string
-	idKey    string
-	nameKey  string
+	name        string
+	displayName string
+	config      *oauth2.Config
+	userURL     string
+	emailKey    string
+	idKey       string
+	nameKey     string
 }
 
 // NewGenericOAuth2Provider creates a config-driven OAuth2 provider.
@@ -59,6 +60,13 @@ func NewGenericOAuth2Provider(
 }
 
 func (p *GenericOAuth2Provider) Name() string { return p.name }
+
+func (p *GenericOAuth2Provider) DisplayName() string {
+	if p.displayName != "" {
+		return p.displayName
+	}
+	return p.name
+}
 
 func (p *GenericOAuth2Provider) AuthCodeURL(state, codeChallenge string) string {
 	return p.config.AuthCodeURL(
@@ -123,10 +131,13 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 		Name:           name,
 	}
 
-	// koanf's Bool getter is true only for an explicit truthy value; absent or
-	// false email_verified means unverified, which login treats as requiring
-	// verification.
-	user.EmailVerified = k.Bool("email_verified")
+	// Only an explicit JSON boolean true verifies the email. koanf's Bool
+	// getter would coerce non-bool truthy values (string "true", numeric 1)
+	// via toBool, widening the verification boundary so a provider emitting
+	// non-standard types could auto-verify an email it never confirmed.
+	if verified, ok := k.Get("email_verified").(bool); ok {
+		user.EmailVerified = verified
+	}
 
 	return user, nil
 }

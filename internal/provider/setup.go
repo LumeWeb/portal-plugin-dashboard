@@ -119,11 +119,13 @@ func (s *ProviderStore) callbackURL(providerID string) string {
 }
 
 func newGenericFromConfig(cfg *pluginDb.SocialProviderConfig, callbackURL string) OAuthProvider {
-	return NewGenericOAuth2Provider(
+	p := NewGenericOAuth2Provider(
 		cfg.ProviderID,
 		cfg.ClientID, cfg.ClientSecret,
 		cfg.GetScopes(),
 		cfg.AuthURL, cfg.TokenURL, cfg.UserURL, callbackURL,
 		cfg.UserEmailKey, cfg.UserIDKey, cfg.UserNameKey,
 	)
+	p.displayName = cfg.DisplayName
+	return p
 }
