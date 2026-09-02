@@ -54,6 +54,11 @@ func GetPluginInfo() core.PluginInfo {
 				pluginBuilder.AddMeta("social_providers", provider.EnabledProviders())
 			}
 
+			if keyTypes := core.ListKeyIdentityTypes(); len(keyTypes) > 0 {
+				builder.AddFeatureFlag("wallet_login", true)
+				pluginBuilder.AddMeta("key_identity_types", keyTypes)
+			}
+
 			pluginBuilder.AddMeta("subdomain", pluginCfg.Subdomain)
 			pluginBuilder.AddMeta("themes", pluginCfg.Themes)
 			return nil
