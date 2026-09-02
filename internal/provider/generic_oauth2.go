@@ -8,18 +8,19 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/samber/lo"
 	"golang.org/x/oauth2"
 )
 
 // GenericOAuth2Provider implements OAuthProvider using golang.org/x/oauth2
 // with config-driven endpoints and user-info field mapping.
 type GenericOAuth2Provider struct {
-	name        string
-	config      *oauth2.Config
-	userURL     string
-	emailKey    string
-	idKey       string
-	nameKey     string
+	name     string
+	config   *oauth2.Config
+	userURL  string
+	emailKey string
+	idKey    string
+	nameKey  string
 }
 
 // NewGenericOAuth2Provider creates a config-driven OAuth2 provider.
@@ -43,9 +44,9 @@ func NewGenericOAuth2Provider(
 			},
 		},
 		userURL:  userURL,
-		emailKey: defaultIfEmpty(emailKey, "email"),
-		idKey:    defaultIfEmpty(idKey, "id"),
-		nameKey:  defaultIfEmpty(nameKey, "name"),
+		emailKey: lo.Ternary(emailKey != "", emailKey, "email"),
+		idKey:    lo.Ternary(idKey != "", idKey, "id"),
+		nameKey:  lo.Ternary(nameKey != "", nameKey, "name"),
 	}
 }
 
@@ -97,13 +98,6 @@ func (p *GenericOAuth2Provider) Exchange(ctx context.Context, code, codeVerifier
 	}
 
 	return user, nil
-}
-
-func defaultIfEmpty(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
 }
 
 // getString navigates a nested JSON map using dot-notation (e.g. "data.id").
