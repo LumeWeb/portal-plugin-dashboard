@@ -188,7 +188,8 @@ func TestKeyIdentityRegister_InvalidProof(t *testing.T) {
 }
 
 // TestKeyIdentityRegister_CreateAccountFailure surfaces typed account errors
-// (e.g. the anon email colliding with an existing account) with their status.
+// (e.g. the anon email colliding with an account but the key still unlinked)
+// with their status.
 func TestKeyIdentityRegister_CreateAccountFailure(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureSolanaHandlerRegistered()
@@ -204,6 +205,8 @@ func TestKeyIdentityRegister_CreateAccountFailure(t *testing.T) {
 		userSvc.EXPECT().CreateAccount(
 			mock.Anything, core.AnonEmail(key), mock.Anything, false, mock.Anything,
 		).Return(existing, core.NewAccountError(core.ErrKeyEmailAlreadyExists, nil)).Once()
+		// Collision re-check: key still unlinked → surface the error.
+		userSvc.EXPECT().KeyIdentityExists(mock.Anything, "solana", key).Return(false, nil, nil).Once()
 
 		reqBody := dto.KeyIdentityVerifyRequest{
 			KeyType:   "solana",
@@ -218,6 +221,94 @@ func TestKeyIdentityRegister_CreateAccountFailure(t *testing.T) {
 		w := requestKeyIdentity(tb, ctx, "POST", "/api/auth/key/verify", body)
 
 		acctErr := core.NewAccountError(core.ErrKeyEmailAlreadyExists, nil)
+		assert.Equal(tb, acctErr.HttpStatus(), w.Code, "body: %s", w.Body.String())
+		userSvc.AssertExpectations(tb)
+		authSvc.AssertExpectations(tb)
+	})
+}
+
+// TestKeyIdentityRegister_RaceCollisionLogsIn covers the loser of a
+// concurrent registration race: the anon email collides, but the key is
+// already linked by the winner, so the request falls through to the normal
+// login path instead of failing.
+func TestKeyIdentityRegister_RaceCollisionLogsIn(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		ensureSolanaHandlerRegistered()
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+
+		key, priv := solanaTestKey(tb)
+		message, signature := issueAndSignSolanaChallenge(tb, ctx, key, priv)
+
+		existing := &models.User{Model: gorm.Model{ID: 3}, Email: core.AnonEmail(key)}
+		testToken := CreateTestLoginToken(tb, ctx, "3")
+
+		userSvc.EXPECT().KeyIdentityExists(mock.Anything, "solana", key).Return(false, nil, nil).Once()
+		userSvc.EXPECT().CreateAccount(
+			mock.Anything, core.AnonEmail(key), mock.Anything, false, mock.Anything,
+		).Return(existing, core.NewAccountError(core.ErrKeyEmailAlreadyExists, nil)).Once()
+		// Collision re-check: the winner linked the key already.
+		userSvc.EXPECT().KeyIdentityExists(mock.Anything, "solana", key).Return(true, &models.KeyIdentity{}, nil).Once()
+		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
+			mock.Anything, "solana", key, mock.Anything, mock.Anything, false,
+		).Return(testToken, existing, nil).Once()
+
+		reqBody := dto.KeyIdentityVerifyRequest{
+			KeyType:   "solana",
+			Key:       key,
+			Message:   message,
+			Signature: signature,
+			Remember:  false,
+		}
+		body, err := json.Marshal(reqBody)
+		require.NoError(tb, err)
+
+		w := requestKeyIdentity(tb, ctx, "POST", "/api/auth/key/verify", body)
+
+		require.Equal(tb, http.StatusFound, w.Code, "body: %s", w.Body.String())
+		// The account was provisioned by the concurrent winner, not here.
+		assert.NotContains(tb, w.Header().Get("Location"), "new_account=1")
+		userSvc.AssertExpectations(tb)
+		authSvc.AssertExpectations(tb)
+	})
+}
+
+// TestKeyIdentityRegister_RollsBackOrphanAccount ensures a failure after
+// account creation (link step) removes the otherwise inaccessible account.
+func TestKeyIdentityRegister_RollsBackOrphanAccount(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		ensureSolanaHandlerRegistered()
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+
+		key, priv := solanaTestKey(tb)
+		message, signature := issueAndSignSolanaChallenge(tb, ctx, key, priv)
+
+		anonUser := &models.User{Model: gorm.Model{ID: 9}, Email: core.AnonEmail(key)}
+
+		userSvc.EXPECT().KeyIdentityExists(mock.Anything, "solana", key).Return(false, nil, nil).Once()
+		userSvc.EXPECT().CreateAccount(
+			mock.Anything, core.AnonEmail(key), mock.Anything, false, mock.Anything,
+		).Return(anonUser, nil).Once()
+		userSvc.EXPECT().UpdateAccountInfo(mock.Anything, uint(9), mock.Anything).Return(nil).Once()
+		userSvc.EXPECT().AddKeyIdentity(mock.Anything, uint(9), "solana", key, mock.Anything).
+			Return(core.NewAccountError(core.ErrKeyKeyIdentityExists, nil)).Once()
+		// Orphan cleanup.
+		userSvc.EXPECT().DeleteAccount(mock.Anything, uint(9)).Return(nil).Once()
+
+		reqBody := dto.KeyIdentityVerifyRequest{
+			KeyType:   "solana",
+			Key:       key,
+			Message:   message,
+			Signature: signature,
+			Remember:  false,
+		}
+		body, err := json.Marshal(reqBody)
+		require.NoError(tb, err)
+
+		w := requestKeyIdentity(tb, ctx, "POST", "/api/auth/key/verify", body)
+
+		acctErr := core.NewAccountError(core.ErrKeyKeyIdentityExists, nil)
 		assert.Equal(tb, acctErr.HttpStatus(), w.Code, "body: %s", w.Body.String())
 		userSvc.AssertExpectations(tb)
 		authSvc.AssertExpectations(tb)

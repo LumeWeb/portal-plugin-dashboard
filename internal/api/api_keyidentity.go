@@ -149,8 +149,7 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 
 	exists, _, err := a.user.KeyIdentityExists(c.Request().Context(), requestDto.KeyType, normalizedKey)
 	if err != nil {
-		a.Logger().Error("failed to check key identity existence", zap.Error(err), zap.String("key_type", requestDto.KeyType))
-		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusInternalServerError)
+		return a.encodeKeyIdentityError(ctx, asLoginError(err), requestDto.KeyType, "failed to check key identity existence")
 	}
 
 	var (
@@ -164,21 +163,15 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 			coreCtx, requestDto.KeyType, normalizedKey, proof, ctx.RealIP(), requestDto.Remember,
 		)
 		if err != nil {
-			if core.IsAccountError(err) {
-				acctErr := core.AsAccountError(err)
-				a.Logger().Error("key identity login failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
-				return ctx.Error(acctErr, acctErr.HttpStatus())
-			}
-			acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
-			a.Logger().Error("key identity login failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
-			return ctx.Error(acctErr, acctErr.HttpStatus())
+			return a.encodeKeyIdentityError(ctx, asLoginError(err), requestDto.KeyType, "key identity login failed")
 		}
 	} else {
-		_jwt, user, err = a.registerAnonKeyIdentity(c, coreCtx, requestDto, handler, normalizedKey, proof)
+		var created bool
+		_jwt, user, created, err = a.registerAnonKeyIdentity(c, coreCtx, requestDto, handler, normalizedKey, proof)
 		if err != nil {
 			return err // response already encoded by the registration helper
 		}
-		newAccount = true
+		newAccount = created
 	}
 
 	if user != nil && user.OTPEnabled {
@@ -224,13 +217,31 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 	return c.Redirect(http.StatusFound, redirectURL)
 }
 
+// asLoginError normalizes any login failure into an account error suitable
+// for HTTP encoding.
+func asLoginError(err error) *core.Error {
+	if acctErr := core.AsAccountError(err); acctErr != nil {
+		return acctErr
+	}
+	return core.NewAccountError(core.ErrKeyInvalidLogin, err)
+}
+
+// encodeKeyIdentityError logs an account error with the key type and returns
+// it as an already-encoded HTTP response for ctx.Error to write.
+func (a *API) encodeKeyIdentityError(ctx httputil.RequestContext, acctErr *core.Error, keyType, msg string) error {
+	a.Logger().Error(msg, zap.Error(acctErr), zap.String("key_type", keyType))
+	return ctx.Error(acctErr, acctErr.HttpStatus())
+}
+
 // registerAnonKeyIdentity provisions a new anonymous account for a key that
 // is not linked to any account yet. The proof is verified against the
 // metadata submitted with the verify request (the challenge was issued for
 // it), then the account is created with a generated email and an unguessable
 // password, the key identity is linked, and a login token is issued.
-// It returns (http.StatusBadRequest/500-style) encoded error responses via ctx
-// and a nil error only when registration succeeded.
+// The created flag is false when a concurrent request already provisioned
+// the account and this request fell back to logging in instead.
+// It returns encoded error responses via ctx and a nil error only when
+// a login token was produced.
 func (a *API) registerAnonKeyIdentity(
 	c echo.Context,
 	coreCtx core.Context,
@@ -238,7 +249,7 @@ func (a *API) registerAnonKeyIdentity(
 	handler core.KeyIdentityHandler,
 	normalizedKey string,
 	proof []byte,
-) (string, *models.User, error) {
+) (string, *models.User, bool, error) {
 	ctx := httputil.Context(c)
 
 	metadata := json.RawMessage(requestDto.Metadata)
@@ -247,59 +258,104 @@ func (a *API) registerAnonKeyIdentity(
 	}
 	validatedMetadata, err := handler.ValidateMetadata(metadata)
 	if err != nil {
-		return "", nil, ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusBadRequest)
+		return "", nil, false, ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusBadRequest)
 	}
 
 	if err := handler.VerifyProof(coreCtx, normalizedKey, validatedMetadata, proof); err != nil {
-		a.Logger().Error("anon key identity registration proof verification failed",
-			zap.Error(err), zap.String("key_type", requestDto.KeyType))
-		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
-		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+		return "", nil, false, a.encodeKeyIdentityError(ctx, asLoginError(err), requestDto.KeyType,
+			"anon key identity registration proof verification failed")
 	}
 
 	password, err := generateRandomString(32)
 	if err != nil {
-		return "", nil, ctx.Error(core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err), http.StatusInternalServerError)
+		return "", nil, false, a.encodeKeyIdentityError(ctx,
+			core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err), requestDto.KeyType,
+			"anon key identity account creation failed")
 	}
 
 	user, err := a.user.CreateAccount(c.Request().Context(), core.AnonEmail(normalizedKey), password, false, core.WithBootstrapAdmin(false))
 	if err != nil {
-		if core.IsAccountError(err) {
-			// Covers race conditions (e.g. the key/email colliding with a
-			// concurrently provisioned account).
-			acctErr := core.AsAccountError(err)
-			a.Logger().Error("anon key identity account creation failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
-			return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+		token, winner, err := a.recoverCreateAccountFailure(ctx, err, requestDto, normalizedKey, coreCtx, proof)
+		if err != nil {
+			return "", nil, false, err
 		}
-		acctErr := core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err)
-		a.Logger().Error("anon key identity account creation failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
-		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+		return token, winner, false, nil
+	}
+
+	// rollBack removes the just-created account. Its password is unguessable
+	// and its email is not routable, so anything failing from here on leaves
+	// an account that no one can ever log into or claim — delete it.
+	rollBack := func(acctErr *core.Error, msg string) (string, *models.User, bool, error) {
+		if derr := a.user.DeleteAccount(c.Request().Context(), user.ID); derr != nil {
+			a.Logger().Error("failed to delete orphan anon account", zap.Error(derr), zap.Uint("user_id", user.ID))
+		}
+		return "", nil, false, a.encodeKeyIdentityError(ctx, acctErr, requestDto.KeyType, msg)
 	}
 
 	// There is no mailbox to confirm; the account is usable immediately.
 	if err := a.user.UpdateAccountInfo(c.Request().Context(), user.ID, map[string]any{"verified": true}); err != nil {
-		acctErr := core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err)
-		a.Logger().Error("failed to mark anon account verified", zap.Error(acctErr))
-		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+		return rollBack(core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err),
+			"failed to mark anon account verified")
 	}
 	user.Verified = true
 
 	if err := a.user.AddKeyIdentity(c.Request().Context(), user.ID, requestDto.KeyType, normalizedKey, validatedMetadata); err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			a.Logger().Error("failed to link key identity to new anon account", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
-			return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
-		}
-		acctErr := core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err)
-		a.Logger().Error("failed to link key identity to new anon account", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
-		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+		return rollBack(wrapSocialError(err), "failed to link key identity to new anon account")
 	}
 
 	token, err := a.auth.LoginID(c.Request().Context(), user.ID, ctx.RealIP(), requestDto.Remember)
 	if err != nil {
-		a.Logger().Error("failed to issue login token for anon account", zap.Error(err))
-		return "", nil, ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusInternalServerError)
+		return rollBack(core.NewAccountError(core.ErrKeyInvalidLogin, err), "failed to issue login token for anon account")
 	}
 
+	return token, user, true, nil
+}
+
+// wrapSocialError preserves typed account errors and wraps anything else as a
+// social account creation failure.
+func wrapSocialError(err error) *core.Error {
+	if acctErr := core.AsAccountError(err); acctErr != nil {
+		return acctErr
+	}
+	return core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err)
+}
+
+// recoverCreateAccountFailure handles a CreateAccount failure during anon
+// wallet registration. The anon email is derived from the key, so a collision
+// means a concurrent verify just provisioned the account; if the key is now
+// linked, this request falls back to logging in as the winner instead of
+// failing the loser of the race. A non-nil fatalErr is an already-encoded
+// HTTP response; token and user are only set on the fallback-login path.
+func (a *API) recoverCreateAccountFailure(
+	ctx httputil.RequestContext,
+	err error,
+	requestDto dto.KeyIdentityVerifyRequest,
+	normalizedKey string,
+	coreCtx core.Context,
+	proof []byte,
+) (string, *models.User, error) {
+	keyType := requestDto.KeyType
+	if !core.IsAccountError(err) {
+		return "", nil, a.encodeKeyIdentityError(ctx,
+			core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err), keyType,
+			"anon key identity account creation failed")
+	}
+	acctErr := core.AsAccountError(err)
+	if acctErr.Key != core.ErrKeyEmailAlreadyExists {
+		return "", nil, a.encodeKeyIdentityError(ctx, acctErr, keyType, "anon key identity account creation failed")
+	}
+
+	linked, _, lerr := a.user.KeyIdentityExists(ctx.Request().Context(), keyType, normalizedKey)
+	if lerr != nil || !linked {
+		return "", nil, a.encodeKeyIdentityError(ctx, acctErr, keyType, "anon key identity account creation failed")
+	}
+
+	// The winner linked the key: log in through the normal path.
+	token, user, err := a.auth.LoginKeyIdentityWithContext(
+		coreCtx, keyType, normalizedKey, proof, ctx.RealIP(), requestDto.Remember,
+	)
+	if err != nil {
+		return "", nil, a.encodeKeyIdentityError(ctx, asLoginError(err), keyType, "key identity login failed")
+	}
 	return token, user, nil
 }
