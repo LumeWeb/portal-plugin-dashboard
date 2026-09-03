@@ -221,8 +221,9 @@ func TestFinishSocialLogin_UnverifiedEmailSendFailure(t *testing.T) {
 		reqCtx, w := newSocialTestContext(t)
 		err := api.finishSocialLogin(reqCtx, "google",
 			&provider.OAuth2User{ProviderUserID: "uid-2", Email: "unverified@example.com", EmailVerified: false}, "/")
-		require.Error(tb, err)
+		require.NoError(tb, err)
 		require.Equal(tb, http.StatusInternalServerError, w.Code)
+		require.Contains(tb, w.Body.String(), "Sign-in could not be completed")
 	}, socialTestOptions)
 }
 
@@ -237,8 +238,12 @@ func TestFinishSocialLogin_UnverifiedEmailConflictRejected(t *testing.T) {
 		reqCtx, w := newSocialTestContext(t)
 		err := api.finishSocialLogin(reqCtx, "google",
 			&provider.OAuth2User{ProviderUserID: "uid-3", Email: "taken@example.com"}, "/")
-		require.Error(tb, err)
+		require.NoError(tb, err)
 		require.Equal(tb, http.StatusConflict, w.Code)
+		// The conflict renders a user screen, never a raw JSON error body.
+		require.Contains(tb, w.Header().Get("Content-Type"), "text/html")
+		require.Contains(tb, w.Body.String(), "Email already in use")
+		require.Contains(tb, w.Body.String(), "already associated with another account")
 		userSvc.AssertNotCalled(tb, "EmailExists")
 	}, socialTestOptions)
 }
@@ -282,8 +287,9 @@ func TestFinishSocialLogin_ConsentPromptEmailGone(t *testing.T) {
 		reqCtx, w := newSocialTestContext(t)
 		err := api.finishSocialLogin(reqCtx, "google",
 			&provider.OAuth2User{ProviderUserID: "uid-3", Email: "taken@example.com", EmailVerified: true}, "/")
-		require.Error(tb, err)
+		require.NoError(tb, err)
 		require.Equal(tb, http.StatusConflict, w.Code)
+		require.Contains(tb, w.Body.String(), "Email already in use")
 		socialSvc.AssertNotCalled(tb, "LinkAccount")
 	}, socialTestOptions)
 }
@@ -316,8 +322,10 @@ func TestCompleteSocialLink_AlreadyLinked(t *testing.T) {
 		session := &provider.SocialAuthSession{Mode: provider.SessionModeLink, UserID: 9, ReturnURL: "/settings"}
 		err := api.completeSocialLink(reqCtx, "google", session,
 			&provider.OAuth2User{ProviderUserID: "uid-9", Email: "x@example.com"})
-		require.Error(tb, err)
+		require.NoError(tb, err)
 		require.Equal(tb, http.StatusConflict, w.Code)
+		// Link-mode conflicts show the user screen instead of JSON.
+		require.Contains(tb, w.Body.String(), "Account already linked")
 	}, socialTestOptions)
 }
 
@@ -465,6 +473,40 @@ func TestSocialAuthCallback_LinkFlow(t *testing.T) {
 		require.NoError(tb, api.socialAuthCallback(echoCtx))
 		require.Equal(tb, http.StatusFound, w.Code)
 		require.Equal(tb, "/settings", w.Header().Get("Location"))
+	}, socialTestOptions)
+}
+
+// Every failure in the callback flow renders the sing-in error screen, never
+// a raw JSON error body, because the endpoint is only ever navigated by the
+// browser.
+func TestSocialAuthCallback_StateMismatchRendersErrorScreen(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		key, err := api.socialSessionKey()
+		require.NoError(tb, err)
+		session := &provider.SocialAuthSession{State: "state-correct", CodeVerifier: "verifier-xyz", ReturnURL: "/"}
+		cookW := httptest.NewRecorder()
+		require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
+		cookies := cookW.Result().Cookies()
+		require.Len(tb, cookies, 1)
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google/callback?state=state-forged&code=code-1", nil)
+		req.AddCookie(cookies[0])
+		w := httptest.NewRecorder()
+		echoCtx := e.NewContext(req, w)
+		echoCtx.SetParamNames("provider")
+		echoCtx.SetParamValues("google")
+
+		require.NoError(tb, api.socialAuthCallback(echoCtx))
+		require.Equal(tb, http.StatusBadRequest, w.Code)
+		require.Contains(tb, w.Header().Get("Content-Type"), "text/html")
+		body := w.Body.String()
+		require.Contains(tb, body, "Sign-in could not be completed")
+		// The reason must never echo the forged state or error keys.
+		require.NotContains(tb, body, "state-forged")
+		require.NotContains(tb, body, "INVALID_STATE")
 	}, socialTestOptions)
 }
 

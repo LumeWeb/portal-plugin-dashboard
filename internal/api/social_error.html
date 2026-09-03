@@ -1,0 +1,21 @@
+{{define "page-title"}}{{.Heading}}{{end}}
+
+{{define "page-content"}}
+<div class="app-header">
+  <div class="app-logo">
+    <svg class="app-logo-placeholder" viewBox="0 0 24 24" fill="none" stroke="var(--color-destructive)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+  </div>
+  <h1 class="app-name" id="error-heading">{{.Heading}}</h1>
+  <p class="app-description" id="error-description">{{.Message}}</p>
+</div>
+
+<div class="divider"></div>
+
+<div class="actions">
+  <a class="btn btn-primary" href="{{.ActionURL}}">{{.ActionLabel}}</a>
+</div>
+{{end}}
