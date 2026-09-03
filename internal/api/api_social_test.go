@@ -544,6 +544,41 @@ func TestSocialAuthLogin_DefaultsReturnURL(t *testing.T) {
 	}, socialTestOptions)
 }
 
+// Browsers normalize "\" to "/" in special-scheme URLs, so "/\evil.com" would
+// become a protocol-relative redirect; it must be rejected as an invalid
+// return URL.
+func TestSocialAuthLogin_RejectsBackslashReturn(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, `/api/account/auth/sso/google?return=/\evil.com`, nil)
+		w := httptest.NewRecorder()
+		echoCtx := e.NewContext(req, w)
+		echoCtx.SetParamNames("provider")
+		echoCtx.SetParamValues("google")
+
+		require.Error(tb, api.socialAuthLogin(echoCtx))
+		require.Equal(tb, http.StatusBadRequest, w.Code)
+		require.Contains(tb, w.Body.String(), "Invalid return URL.")
+	}, socialTestOptions)
+}
+
+// The auth-complete sanitizer is the second line of defense behind
+// requestReturnURL (e.g. the rootAuthComplete final-hop check); it must drop
+// backslash paths too, not just foreign hosts.
+func TestSanitizeReturnURL_RejectsBackslash(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, _ := socialTestAPI(ctx)
+		host := api.authCompleteHost()
+
+		require.Empty(tb, api.sanitizeReturnURL(`/\evil.com`, host))
+		require.Empty(tb, api.sanitizeReturnURL(`/\/evil.com`, host))
+		require.Empty(tb, api.sanitizeReturnURL(`https://evil.com/path`, host))
+		require.Equal(tb, "/onboarding", api.sanitizeReturnURL("/onboarding", host))
+	}, socialTestOptions)
+}
+
 // A valid consent session renders the consent page with the provider name and
 // the email the link resolves to.
 func TestSocialConsentPage_Renders(t *testing.T) {

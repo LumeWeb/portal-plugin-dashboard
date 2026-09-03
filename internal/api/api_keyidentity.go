@@ -35,6 +35,7 @@ func (a *API) buildKeyIdentityRoutes() []router.Route {
 				router.WithSummary("Verify Key Identity and Login"),
 				router.WithDescription("Verifies a signed challenge and authenticates the user via key identity login."),
 				router.WithRequestBody(dto.KeyIdentityVerifyRequest{}, "Verification request", true),
+				router.WithQueryParam("return", "URL to redirect to after completion", "/onboarding"),
 				router.WithSuccessResponse(http.StatusOK, "Login successful",
 					router.WithJSONContent(dto.KeyIdentityVerifyResponse{}),
 				),
@@ -142,6 +143,11 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 	}
 
 	if user != nil && user.OTPEnabled {
+		// The OTP branch defers the redirect to /api/auth/otp/validate, which
+		// must be called with the same `return` parameter to keep the flow
+		// intact. Return validation is deferred with it so OTP users always
+		// receive the challenge even for an unusable return value.
+
 		// Set short-lived 2FA cookie; do not apply remember-me here
 		if err = a.setAuthCookieWithRemember(c, _jwt, false); err != nil {
 			acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
@@ -160,7 +166,12 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
 	}
 
-	redirectURL := a.buildAuthCompleteURL(_jwt, "")
+	returnUrl, returnErr := a.requestReturnURL(c, "")
+	if returnErr != nil {
+		return returnErr
+	}
+
+	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
 	a.storeRememberFlagInCookie(c, requestDto.Remember)
 	return c.Redirect(http.StatusFound, redirectURL)
 }

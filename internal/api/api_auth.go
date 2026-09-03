@@ -33,6 +33,7 @@ func (a *API) buildAuthRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.Mi
 			router.WithSwaggerOptions(
 				router.WithSummary("Login with email and password"),
 				router.WithDescription("Authenticates a user using email and password."),
+				router.WithQueryParam("return", "URL to redirect to after completion", "/onboarding"),
 				router.WithRequestBody(dto.LoginRequest{}, "Login credentials", true),
 				router.WithSuccessResponse(http.StatusOK, "OTP required",
 					router.WithJSONContent(dto.LoginResponse{}),
@@ -160,7 +161,14 @@ func (a *API) login(c echo.Context) error {
 		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
 	}
 
-	redirectURL := a.buildAuthCompleteURL(_jwt, "")
+	// The OTP branch defers the redirect to /api/auth/otp/validate, which must
+	// be called with the same `return` parameter to keep the flow intact.
+	returnUrl, returnErr := a.requestReturnURL(c, "")
+	if returnErr != nil {
+		return returnErr
+	}
+
+	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
 
 	// For non-OTP login, ensure remember cookie is properly set/cleared
 	a.storeRememberFlagInCookie(c, requestDto.Remember)

@@ -35,18 +35,6 @@ type PublicProviderResponse struct {
 	OrderIndex  int    `json:"order_index"`
 }
 
-// SocialLoginQuery binds the query parameters for the social login redirect.
-type SocialLoginQuery struct {
-	ReturnURL string `query:"return"`
-}
-
-var _ httputil.DTORequest[*SocialLoginQuery] = (*SocialLoginQuery)(nil)
-
-// ToModel implements httputil.DTORequest, returning the query unchanged.
-func (q *SocialLoginQuery) ToModel() (*SocialLoginQuery, error) {
-	return q, nil
-}
-
 // SocialCallbackQuery binds the query parameters returned by the OAuth
 // provider on the callback endpoint.
 type SocialCallbackQuery struct {

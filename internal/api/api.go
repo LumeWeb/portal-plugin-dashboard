@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"go.lumeweb.com/portal-middleware/middleware"
@@ -243,8 +244,13 @@ func (a *API) rootAuthComplete(c echo.Context) error {
 		return nil
 	}
 
+	// Only the sanitized value is trusted for the final redirect; an invalid
+	// return parameter falls through to the JSON token response instead of
+	// redirecting to an arbitrary target.
 	if len(returnUrl) > 0 {
-		return c.Redirect(http.StatusFound, returnUrl)
+		if sanitized := a.sanitizeReturnURL(returnUrl, a.authCompleteHost()); sanitized != "" {
+			return c.Redirect(http.StatusFound, sanitized)
+		}
 	}
 
 	responseModel := &dto.LoginResponse{
@@ -394,48 +400,15 @@ func accountErrorResponses(errors ...*core.Error) map[int]swagger.ContentValue {
 }
 
 func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
-	cfg := a.Context().Config().Config().Core
-
-	// Determine effective port (prefer externalPort if set)
-	port := cfg.ExternalPort
-	if port == 0 {
-		port = cfg.Port
-	}
-
-	// Build host with port if needed. The auth-complete path is registered as
-	// a global path, so it resolves on any hostname; prefer this API's own
-	// subdomain (e.g. account.<domain>) so post-login redirects land back on
-	// the site the login flow started from instead of the main-domain root.
-	host := cfg.Domain
-	if sub := a.http.APISubdomain(a.Name(), false); sub != "" {
-		host = sub
-	}
-	if port != 0 && port != 443 && port != 80 {
-		host = fmt.Sprintf("%s:%d", host, port)
-	}
+	host := a.authCompleteHost()
 
 	// Use scheme from request
 	scheme := "http"
-	if cfg.Secure {
+	if a.Config().Config().Core.Secure {
 		scheme = "https"
 	}
 
-	// Validate and sanitize returnURL if provided
-	var sanitizedReturn string
-	if returnURL != "" {
-		if parsedURL, err := url.Parse(returnURL); err == nil {
-			// Only allow relative paths or same-origin URLs on either of the
-			// hostnames the auth-complete route serves: the chosen redirect
-			// host and the bare core domain. Compare by hostname so a return
-			// URL built without an explicit port (relying on the default)
-			// still matches a port-qualified host.
-			if parsedURL.Host == "" ||
-				parsedURL.Hostname() == (&url.URL{Host: host}).Hostname() ||
-				parsedURL.Hostname() == (&url.URL{Host: cfg.Domain}).Hostname() {
-				sanitizedReturn = parsedURL.String()
-			}
-		}
-	}
+	sanitizedReturn := a.sanitizeReturnURL(returnURL, host)
 
 	// Build URL with query params
 	u := url.URL{
@@ -456,6 +429,110 @@ func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
 	}
 
 	return u.String()
+}
+
+// authCompleteHost returns the host (with effective port) the auth-complete
+// route is served on. It prefers this API's own subdomain
+// (e.g. account.<domain>) so post-login redirects land back on the site the
+// login flow started from instead of the main-domain root.
+func (a *API) authCompleteHost() string {
+	cfg := a.Config().Config().Core
+
+	port := cfg.ExternalPort
+	if port == 0 {
+		port = cfg.Port
+	}
+
+	host := cfg.Domain
+	if sub := a.http.APISubdomain(a.Name(), false); sub != "" {
+		host = sub
+	}
+	if port != 0 && port != 443 && port != 80 {
+		host = fmt.Sprintf("%s:%d", host, port)
+	}
+
+	return host
+}
+
+// sanitizeReturnURL filters a return URL to a safe redirect target. Only
+// relative paths or same-origin URLs on either of the hostnames the
+// auth-complete route serves (the chosen redirect host and the bare core
+// domain) survive; everything else returns "". Comparison is by hostname so a
+// return URL built without an explicit port (relying on the default) still
+// matches a port-qualified host.
+func (a *API) sanitizeReturnURL(returnURL, host string) string {
+	if returnURL == "" {
+		return ""
+	}
+
+	cfg := a.Config().Config().Core
+	parsedURL, err := url.Parse(returnURL)
+	if err != nil {
+		return ""
+	}
+
+	// Browsers normalize "\" to "/" in special-scheme URLs, so a path like
+	// "/\evil.com" (Host=="" per url.Parse) becomes a protocol-relative
+	// redirect. Backslashes have no legitimate use here.
+	if strings.Contains(returnURL, "\\") {
+		return ""
+	}
+
+	if parsedURL.Host == "" ||
+		parsedURL.Hostname() == (&url.URL{Host: host}).Hostname() ||
+		parsedURL.Hostname() == (&url.URL{Host: cfg.Domain}).Hostname() {
+		return parsedURL.String()
+	}
+
+	return ""
+}
+
+// isValidReturnURL checks if a return URL is a same-site relative path.
+// Returns true for paths starting with "/" but not "//", false otherwise.
+func (a *API) isValidReturnURL(returnUrl string) bool {
+	if returnUrl == "" {
+		return false
+	}
+
+	// Browsers normalize "\" to "/" in special-scheme URLs, so a path like
+	// "/\evil.com" (Host=="" per url.Parse) would bypass the "//" check yet
+	// become a protocol-relative redirect. Backslashes have no legitimate use
+	// in a redirect target.
+	if strings.Contains(returnUrl, "\\") {
+		return false
+	}
+
+	// Must start with "/" but not "//" to be a relative path
+	if !strings.HasPrefix(returnUrl, "/") || strings.HasPrefix(returnUrl, "//") {
+		return false
+	}
+
+	// Must not be an absolute URL
+	if strings.Contains(returnUrl, "://") {
+		return false
+	}
+
+	return true
+}
+
+// requestReturnURL reads the shared `return` query parameter used by every
+// sign-in launch point (social, key identity, OTP validation) and enforces the
+// same-site relative-path policy. An empty defaultReturn leaves the param
+// unset; callers must keep the unset case reachable so downstream consumers
+// (e.g. the auth-complete JSON token response) keep their documented behavior.
+// On an invalid value it writes the INVALID_RETURN_URL error response and
+// returns an error.
+func (a *API) requestReturnURL(c echo.Context, defaultReturn string) (string, error) {
+	ctx := httputil.Context(c)
+	returnUrl := c.QueryParam("return")
+	if returnUrl == "" {
+		return defaultReturn, nil
+	}
+	if !a.isValidReturnURL(returnUrl) {
+		apiErr := NewError(ErrKeyInvalidReturnURL, nil)
+		return "", ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+	return returnUrl, nil
 }
 
 func (a *API) Configure(gRouter router.Router, accessSvc core.AccessService) error {
