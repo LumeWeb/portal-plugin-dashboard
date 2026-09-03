@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/labstack/echo/v4"
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db/models"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +35,7 @@ func (a *API) buildKeyIdentityRoutes() []router.Route {
 		router.NewRoute(http.MethodPost, "/api/auth/key/verify", a.keyIdentityVerify,
 			router.WithSwaggerOptions(
 				router.WithSummary("Verify Key Identity and Login"),
-				router.WithDescription("Verifies a signed challenge and authenticates the user via key identity login."),
+				router.WithDescription("Verifies a signed challenge and authenticates the user via key identity login. If the key is not linked to any account, a new anonymous account is provisioned (response/redirect carries new_account)."),
 				router.WithRequestBody(dto.KeyIdentityVerifyRequest{}, "Verification request", true),
 				router.WithQueryParam("return", "URL to redirect to after completion", "/onboarding"),
 				router.WithSuccessResponse(http.StatusOK, "Login successful",
@@ -107,6 +109,12 @@ func (a *API) keyIdentityChallenge(c echo.Context) error {
 // keyIdentityVerify verifies a signed challenge and logs in the user.
 // The proof is constructed from the message + signature in the request,
 // marshaled to the JSON format expected by the handler's VerifyProof.
+//
+// If the key is not linked to any account yet, a new anonymous account is
+// provisioned (generated email via core.AnonEmail, unguessable password,
+// key identity linked) using the submitted metadata, mirroring the social
+// login UPSERT. The response flags this via new_account (or new_account=1
+// on the auth-complete redirect) so clients can route to onboarding.
 func (a *API) keyIdentityVerify(c echo.Context) error {
 	ctx := httputil.Context(c)
 
@@ -114,6 +122,16 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 	_, ok := httputil.DecodeAndValidateRequest[*dto.KeyIdentityVerifyRequest, *dto.KeyIdentityVerifyRequest](ctx, &requestDto)
 	if !ok {
 		return nil
+	}
+
+	handler, ok := core.GetKeyIdentityHandler(requestDto.KeyType)
+	if !ok {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, fmt.Errorf("unsupported key type: %s", requestDto.KeyType)), http.StatusBadRequest)
+	}
+
+	normalizedKey, err := handler.NormalizeKey(requestDto.Key)
+	if err != nil {
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusBadRequest)
 	}
 
 	proof, err := json.Marshal(struct {
@@ -128,18 +146,39 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 	}
 
 	coreCtx := a.Context().WithRequestContext(c.Request().Context())
-	_jwt, user, err := a.auth.LoginKeyIdentityWithContext(
-		coreCtx, requestDto.KeyType, requestDto.Key, proof, ctx.RealIP(), requestDto.Remember,
-	)
+
+	exists, _, err := a.user.KeyIdentityExists(c.Request().Context(), requestDto.KeyType, normalizedKey)
 	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
+		a.Logger().Error("failed to check key identity existence", zap.Error(err), zap.String("key_type", requestDto.KeyType))
+		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusInternalServerError)
+	}
+
+	var (
+		_jwt       string
+		user       *models.User
+		newAccount bool
+	)
+
+	if exists {
+		_jwt, user, err = a.auth.LoginKeyIdentityWithContext(
+			coreCtx, requestDto.KeyType, normalizedKey, proof, ctx.RealIP(), requestDto.Remember,
+		)
+		if err != nil {
+			if core.IsAccountError(err) {
+				acctErr := core.AsAccountError(err)
+				a.Logger().Error("key identity login failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
+				return ctx.Error(acctErr, acctErr.HttpStatus())
+			}
+			acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
 			a.Logger().Error("key identity login failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
 			return ctx.Error(acctErr, acctErr.HttpStatus())
 		}
-		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
-		a.Logger().Error("key identity login failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
-		return ctx.Error(acctErr, acctErr.HttpStatus())
+	} else {
+		_jwt, user, err = a.registerAnonKeyIdentity(c, coreCtx, requestDto, handler, normalizedKey, proof)
+		if err != nil {
+			return err // response already encoded by the registration helper
+		}
+		newAccount = true
 	}
 
 	if user != nil && user.OTPEnabled {
@@ -159,8 +198,9 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 		a.storeRememberFlagInCookie(c, requestDto.Remember)
 
 		responseModel := &dto.KeyIdentityVerifyResponse{
-			Token: _jwt,
-			Otp:   true,
+			Token:      _jwt,
+			Otp:        true,
+			NewAccount: newAccount,
 		}
 		var responseDto dto.KeyIdentityVerifyResponse
 		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
@@ -172,6 +212,94 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 	}
 
 	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
+	if newAccount {
+		if u, perr := url.Parse(redirectURL); perr == nil {
+			q := u.Query()
+			q.Set("new_account", "1")
+			u.RawQuery = q.Encode()
+			redirectURL = u.String()
+		}
+	}
 	a.storeRememberFlagInCookie(c, requestDto.Remember)
 	return c.Redirect(http.StatusFound, redirectURL)
+}
+
+// registerAnonKeyIdentity provisions a new anonymous account for a key that
+// is not linked to any account yet. The proof is verified against the
+// metadata submitted with the verify request (the challenge was issued for
+// it), then the account is created with a generated email and an unguessable
+// password, the key identity is linked, and a login token is issued.
+// It returns (http.StatusBadRequest/500-style) encoded error responses via ctx
+// and a nil error only when registration succeeded.
+func (a *API) registerAnonKeyIdentity(
+	c echo.Context,
+	coreCtx core.Context,
+	requestDto dto.KeyIdentityVerifyRequest,
+	handler core.KeyIdentityHandler,
+	normalizedKey string,
+	proof []byte,
+) (string, *models.User, error) {
+	ctx := httputil.Context(c)
+
+	metadata := json.RawMessage(requestDto.Metadata)
+	if len(metadata) == 0 {
+		metadata = json.RawMessage(`{}`)
+	}
+	validatedMetadata, err := handler.ValidateMetadata(metadata)
+	if err != nil {
+		return "", nil, ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusBadRequest)
+	}
+
+	if err := handler.VerifyProof(coreCtx, normalizedKey, validatedMetadata, proof); err != nil {
+		a.Logger().Error("anon key identity registration proof verification failed",
+			zap.Error(err), zap.String("key_type", requestDto.KeyType))
+		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
+		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+
+	password, err := generateRandomString(32)
+	if err != nil {
+		return "", nil, ctx.Error(core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err), http.StatusInternalServerError)
+	}
+
+	user, err := a.user.CreateAccount(c.Request().Context(), core.AnonEmail(normalizedKey), password, false, core.WithBootstrapAdmin(false))
+	if err != nil {
+		if core.IsAccountError(err) {
+			// Covers race conditions (e.g. the key/email colliding with a
+			// concurrently provisioned account).
+			acctErr := core.AsAccountError(err)
+			a.Logger().Error("anon key identity account creation failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
+			return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+		acctErr := core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err)
+		a.Logger().Error("anon key identity account creation failed", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
+		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+
+	// There is no mailbox to confirm; the account is usable immediately.
+	if err := a.user.UpdateAccountInfo(c.Request().Context(), user.ID, map[string]any{"verified": true}); err != nil {
+		acctErr := core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err)
+		a.Logger().Error("failed to mark anon account verified", zap.Error(acctErr))
+		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+	user.Verified = true
+
+	if err := a.user.AddKeyIdentity(c.Request().Context(), user.ID, requestDto.KeyType, normalizedKey, validatedMetadata); err != nil {
+		if core.IsAccountError(err) {
+			acctErr := core.AsAccountError(err)
+			a.Logger().Error("failed to link key identity to new anon account", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
+			return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+		}
+		acctErr := core.NewAccountError(core.ErrKeySocialAccountCreationFailed, err)
+		a.Logger().Error("failed to link key identity to new anon account", zap.Error(acctErr), zap.String("key_type", requestDto.KeyType))
+		return "", nil, ctx.Error(acctErr, acctErr.HttpStatus())
+	}
+
+	token, err := a.auth.LoginID(c.Request().Context(), user.ID, ctx.RealIP(), requestDto.Remember)
+	if err != nil {
+		a.Logger().Error("failed to issue login token for anon account", zap.Error(err))
+		return "", nil, ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, err), http.StatusInternalServerError)
+	}
+
+	return token, user, nil
 }

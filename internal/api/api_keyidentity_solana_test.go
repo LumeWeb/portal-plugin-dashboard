@@ -17,6 +17,7 @@ import (
 	"go.lumeweb.com/portal-plugin-dashboard/internal/keyidentity"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
+	"go.lumeweb.com/portal/db/models"
 )
 
 // ensureSolanaHandlerRegistered registers the Solana (SIWS) key identity
@@ -100,12 +101,17 @@ func TestSolanaKeyIdentityVerify_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureSolanaHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
 
 		key, _ := solanaTestKey(tb)
 		testToken := CreateTestLoginToken(tb, ctx, "1")
+
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "solana", key,
+		).Return(true, &models.KeyIdentity{}, nil).Once()
 
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
 			mock.Anything, "solana", key, mock.Anything, mock.Anything, false,
@@ -137,11 +143,16 @@ func TestSolanaKeyIdentityVerify_InvalidLogin(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureSolanaHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
 
 		key, _ := solanaTestKey(tb)
+
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "solana", key,
+		).Return(true, &models.KeyIdentity{}, nil).Once()
 
 		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, nil)
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(

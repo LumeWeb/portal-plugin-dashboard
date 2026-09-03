@@ -199,15 +199,21 @@ func TestKeyIdentityVerify_InvalidLogin(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureEthereumHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
 
 		key := "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
+		// Key already linked: the login path runs and surfaces the auth error.
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+		).Return(true, &models.KeyIdentity{}, nil).Once()
+
 		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, nil)
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
-			mock.Anything, "ethereum", key, mock.Anything, mock.Anything, false,
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", mock.Anything, mock.Anything, false,
 		).Return("", nil, acctErr).Once()
 
 		reqBody := dto.KeyIdentityVerifyRequest{
@@ -235,6 +241,7 @@ func TestKeyIdentityVerify_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureEthereumHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -242,8 +249,12 @@ func TestKeyIdentityVerify_Success(t *testing.T) {
 		key := "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 		testToken := CreateTestLoginToken(tb, ctx, "1")
 
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+		).Return(true, &models.KeyIdentity{}, nil).Once()
+
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
-			mock.Anything, "ethereum", key, mock.Anything, mock.Anything, false,
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", mock.Anything, mock.Anything, false,
 		).Return(testToken, nil, nil).Once()
 
 		reqBody := dto.KeyIdentityVerifyRequest{
@@ -272,6 +283,7 @@ func TestKeyIdentityVerify_ReturnURL(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureEthereumHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -279,8 +291,12 @@ func TestKeyIdentityVerify_ReturnURL(t *testing.T) {
 		key := "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 		testToken := CreateTestLoginToken(tb, ctx, "1")
 
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+		).Return(true, &models.KeyIdentity{}, nil).Once()
+
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
-			mock.Anything, "ethereum", key, mock.Anything, mock.Anything, false,
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", mock.Anything, mock.Anything, false,
 		).Return(testToken, nil, nil).Once()
 
 		reqBody := dto.KeyIdentityVerifyRequest{
@@ -308,9 +324,14 @@ func TestKeyIdentityVerify_ReturnURL(t *testing.T) {
 func TestKeyIdentityVerify_InvalidReturnURL(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureEthereumHandlerRegistered()
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+		).Return(true, &models.KeyIdentity{}, nil).Once()
 
 		key := "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
@@ -349,6 +370,7 @@ func TestKeyIdentityVerify_NoReturnOmitsParam(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureEthereumHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -356,8 +378,12 @@ func TestKeyIdentityVerify_NoReturnOmitsParam(t *testing.T) {
 		key := "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 		testToken := CreateTestLoginToken(tb, ctx, "1")
 
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+		).Return(true, &models.KeyIdentity{}, nil).Once()
+
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
-			mock.Anything, "ethereum", key, mock.Anything, mock.Anything, false,
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", mock.Anything, mock.Anything, false,
 		).Return(testToken, nil, nil).Once()
 
 		reqBody := dto.KeyIdentityVerifyRequest{
@@ -388,6 +414,7 @@ func TestKeyIdentityVerify_OTPEnabled_IgnoresInvalidReturn(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureEthereumHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -400,8 +427,12 @@ func TestKeyIdentityVerify_OTPEnabled_IgnoresInvalidReturn(t *testing.T) {
 			OTPEnabled: true,
 		}
 
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+		).Return(true, &models.KeyIdentity{}, nil).Once()
+
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
-			mock.Anything, "ethereum", key, mock.Anything, mock.Anything, false,
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", mock.Anything, mock.Anything, false,
 		).Return(testToken, otpUser, nil).Once()
 
 		reqBody := dto.KeyIdentityVerifyRequest{
@@ -431,6 +462,7 @@ func TestKeyIdentityVerify_OTPEnabled(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		ensureEthereumHandlerRegistered()
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
 		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
 		router := ctx.Router()
 		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
@@ -443,8 +475,12 @@ func TestKeyIdentityVerify_OTPEnabled(t *testing.T) {
 			OTPEnabled: true,
 		}
 
+		userSvc.EXPECT().KeyIdentityExists(
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+		).Return(true, &models.KeyIdentity{}, nil).Once()
+
 		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
-			mock.Anything, "ethereum", key, mock.Anything, mock.Anything, false,
+			mock.Anything, "ethereum", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", mock.Anything, mock.Anything, false,
 		).Return(testToken, otpUser, nil).Once()
 
 		reqBody := dto.KeyIdentityVerifyRequest{
