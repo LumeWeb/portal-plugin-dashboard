@@ -488,7 +488,7 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 		if err := a.user.SendEmailVerification(ctx.Request().Context(), result.User.ID); err != nil {
 			return a.socialError(ctx, err)
 		}
-		http.Redirect(ctx.Response(), ctx.Request(), "/verify-email", http.StatusFound)
+		http.Redirect(ctx.Response(), ctx.Request(), "/account/verify", http.StatusFound)
 		return nil
 	}
 
