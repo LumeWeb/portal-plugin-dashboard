@@ -273,6 +273,51 @@ func TestKeyIdentityRegister_RaceCollisionLogsIn(t *testing.T) {
 	})
 }
 
+// TestKeyIdentityRegister_KeepsLinkedAccountOnTokenFailure ensures a token
+// issuance failure after the key was linked does NOT delete the account —
+// the wallet itself is a working login credential at that point, so a retry
+// can complete through a normal wallet login.
+func TestKeyIdentityRegister_KeepsLinkedAccountOnTokenFailure(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		ensureSolanaHandlerRegistered()
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+
+		key, priv := solanaTestKey(tb)
+		message, signature := issueAndSignSolanaChallenge(tb, ctx, key, priv)
+
+		anonUser := &models.User{Model: gorm.Model{ID: 9}, Email: core.AnonEmail(key)}
+		acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, nil)
+
+		userSvc.EXPECT().KeyIdentityExists(mock.Anything, "solana", key).Return(false, nil, nil).Once()
+		userSvc.EXPECT().CreateAccount(
+			mock.Anything, core.AnonEmail(key), mock.Anything, false, mock.Anything,
+		).Return(anonUser, nil).Once()
+		userSvc.EXPECT().UpdateAccountInfo(mock.Anything, uint(9), mock.Anything).Return(nil).Once()
+		userSvc.EXPECT().AddKeyIdentity(mock.Anything, uint(9), "solana", key, mock.Anything).Return(nil).Once()
+		authSvc.MockAuthService.EXPECT().LoginID(mock.Anything, uint(9), mock.Anything, false).
+			Return("", acctErr).Once()
+		// Deliberately no DeleteAccount expectation: an unexpected DeleteAccount
+		// call would panic and fail the test, proving the account survives.
+
+		reqBody := dto.KeyIdentityVerifyRequest{
+			KeyType:   "solana",
+			Key:       key,
+			Message:   message,
+			Signature: signature,
+			Remember:  false,
+		}
+		body, err := json.Marshal(reqBody)
+		require.NoError(tb, err)
+
+		w := requestKeyIdentity(tb, ctx, "POST", "/api/auth/key/verify", body)
+
+		assert.Equal(tb, acctErr.HttpStatus(), w.Code, "body: %s", w.Body.String())
+		userSvc.AssertExpectations(tb)
+		authSvc.AssertExpectations(tb)
+	})
+}
+
 // TestKeyIdentityRegister_RollsBackOrphanAccount ensures a failure after
 // account creation (link step) removes the otherwise inaccessible account.
 func TestKeyIdentityRegister_RollsBackOrphanAccount(t *testing.T) {

@@ -305,7 +305,12 @@ func (a *API) registerAnonKeyIdentity(
 
 	token, err := a.auth.LoginID(c.Request().Context(), user.ID, ctx.RealIP(), requestDto.Remember)
 	if err != nil {
-		return rollBack(core.NewAccountError(core.ErrKeyInvalidLogin, err), "failed to issue login token for anon account")
+		// No rollback here: the key identity is already linked, so the wallet
+		// itself is a working login credential — the account is not an orphan.
+		// A retry will issue the token for that same wallet login.
+		return "", nil, false, a.encodeKeyIdentityError(ctx,
+			core.NewAccountError(core.ErrKeyInvalidLogin, err), requestDto.KeyType,
+			"failed to issue login token for anon account")
 	}
 
 	return token, user, true, nil
