@@ -199,7 +199,7 @@ func TestFinishSocialLogin_UnverifiedEmailRequiresVerification(t *testing.T) {
 		require.NoError(tb, err)
 		// No session: redirected to the verification page instead of auth-complete.
 		require.Equal(tb, http.StatusFound, w.Code)
-		require.Equal(tb, "/verify-email", w.Header().Get("Location"))
+		require.Equal(tb, "/account/verify", w.Header().Get("Location"))
 		authSvc.AssertNotCalled(tb, "LoginID")
 	}, socialTestOptions)
 }
