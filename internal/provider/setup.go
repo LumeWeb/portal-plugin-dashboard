@@ -3,10 +3,13 @@ package provider
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/samber/lo"
 
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
@@ -28,13 +31,20 @@ type PublicProviderInfo struct {
 	OrderIndex  int    `json:"order_index"`
 }
 
+// providerEntry pairs an OAuth provider with its display ordering, so the
+// store can emit providers in order_index order without touching the DB.
+type providerEntry struct {
+	provider   OAuthProvider
+	orderIndex int
+}
+
 // ProviderStore holds the OAuthProvider instances for enabled providers,
 // built from SocialProviderConfig rows in the database. It is refreshed at
 // startup and after every admin CRUD mutation, and self-heals on a lookup
 // miss so a failed cache reload never leaves login reading stale providers.
 type ProviderStore struct {
 	mu         sync.RWMutex
-	providers  map[string]OAuthProvider
+	providers  map[string]providerEntry
 	ctx        core.Context
 	db         *gorm.DB
 	lastReload time.Time  // last DB reload attempt, for the miss throttle
@@ -44,7 +54,7 @@ type ProviderStore struct {
 // NewProviderStore creates an empty ProviderStore.
 func NewProviderStore() *ProviderStore {
 	return &ProviderStore{
-		providers: make(map[string]OAuthProvider),
+		providers: make(map[string]providerEntry),
 	}
 }
 
@@ -63,11 +73,12 @@ func (s *ProviderStore) LoadFromDB(db *gorm.DB) error {
 		return fmt.Errorf("load enabled social providers: %w", err)
 	}
 
-	providers := make(map[string]OAuthProvider, len(configs))
-	for i := range configs {
-		cfg := &configs[i]
-		providers[cfg.ProviderID] = newGenericFromConfig(cfg, s.callbackURL(cfg.ProviderID), s.logger())
-	}
+	providers := lo.SliceToMap(configs, func(cfg pluginDb.SocialProviderConfig) (string, providerEntry) {
+		return cfg.ProviderID, providerEntry{
+			provider:   newGenericFromConfig(&cfg, s.callbackURL(cfg.ProviderID), s.logger()),
+			orderIndex: cfg.OrderIndex,
+		}
+	})
 
 	s.mu.Lock()
 	s.providers = providers
@@ -83,11 +94,11 @@ func (s *ProviderStore) LoadFromDB(db *gorm.DB) error {
 // trigger one reload per cooldown window rather than one DB read per request.
 func (s *ProviderStore) GetProvider(name string) (OAuthProvider, error) {
 	s.mu.RLock()
-	p, ok := s.providers[name]
+	entry, ok := s.providers[name]
 	db := s.db
 	s.mu.RUnlock()
 	if ok {
-		return p, nil
+		return entry.provider, nil
 	}
 	if db == nil {
 		return nil, fmt.Errorf("provider %s not enabled", name)
@@ -95,10 +106,10 @@ func (s *ProviderStore) GetProvider(name string) (OAuthProvider, error) {
 
 	if s.reloadIfDue(db) {
 		s.mu.RLock()
-		p, ok = s.providers[name]
+		entry, ok = s.providers[name]
 		s.mu.RUnlock()
 		if ok {
-			return p, nil
+			return entry.provider, nil
 		}
 	}
 
@@ -141,17 +152,30 @@ func (s *ProviderStore) EvictProvider(name string) {
 	delete(s.providers, name)
 }
 
-// EnabledProviders returns the list of enabled provider identifiers.
+// EnabledProviders returns the enabled provider identifiers in display order:
+// order_index ascending, ties broken by provider_id. This is the array the
+// plugin publishes as dashboard meta.social_providers, and the login page
+// renders it in array order.
 func (s *ProviderStore) EnabledProviders() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	names := make([]string, 0, len(s.providers))
-	for name := range s.providers {
-		names = append(names, name)
+	type ordered struct {
+		name  string
+		order int
 	}
-	sort.Strings(names)
-	return names
+	rows := lo.MapToSlice(s.providers, func(name string, entry providerEntry) ordered {
+		return ordered{name: name, order: entry.orderIndex}
+	})
+	slices.SortFunc(rows, func(a, b ordered) int {
+		if a.order != b.order {
+			return a.order - b.order
+		}
+		return strings.Compare(a.name, b.name)
+	})
+	return lo.Map(rows, func(row ordered, _ int) string {
+		return row.name
+	})
 }
 
 // ListPublicProviders returns public metadata for all enabled providers,
@@ -161,10 +185,17 @@ func (s *ProviderStore) ListPublicProviders() []PublicProviderInfo {
 	defer s.mu.RUnlock()
 
 	infos := make([]PublicProviderInfo, 0, len(s.providers))
-	for name := range s.providers {
-		infos = append(infos, PublicProviderInfo{ProviderID: name})
+	for name, entry := range s.providers {
+		infos = append(infos, PublicProviderInfo{
+			ProviderID:  name,
+			DisplayName: entry.provider.DisplayName(),
+			OrderIndex:  entry.orderIndex,
+		})
 	}
 	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].OrderIndex != infos[j].OrderIndex {
+			return infos[i].OrderIndex < infos[j].OrderIndex
+		}
 		return infos[i].ProviderID < infos[j].ProviderID
 	})
 	return infos
