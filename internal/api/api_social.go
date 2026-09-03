@@ -52,13 +52,29 @@ var socialLayoutHTML string
 //go:embed social_consent.html
 var socialConsentHTML string
 
+//go:embed social_error.html
+var socialErrorHTML string
+
+type socialErrorPageData struct {
+	Heading     string
+	Message     string
+	ActionURL   string
+	ActionLabel string
+}
+
 var socialConsentTemplate *template.Template
+var socialErrorTemplate *template.Template
 
 func init() {
 	socialConsentTemplate = template.Must(template.New("social-consent").
 		Parse(socialLayoutHTML))
 	template.Must(socialConsentTemplate.New("page").Parse(socialConsentHTML))
 	template.Must(socialConsentTemplate.Parse(`{{define "consent"}}{{template "layout" .}}{{end}}`))
+
+	socialErrorTemplate = template.Must(template.New("social-error").
+		Parse(socialLayoutHTML))
+	template.Must(socialErrorTemplate.New("page").Parse(socialErrorHTML))
+	template.Must(socialErrorTemplate.Parse(`{{define "error"}}{{template "layout" .}}{{end}}`))
 }
 
 func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []router.Route {
@@ -250,40 +266,43 @@ func (a *API) socialAuthCallback(c echo.Context) error {
 
 	providerName := c.Param("provider")
 
+	// This endpoint is only ever navigated by the browser (the provider's
+	// redirect lands here), so every failure surfaces as the styled sign-in
+	// error screen instead of a raw JSON body. Errors that carry details
+	// (token exchange failures) are logged above; the page stays generic.
 	key, err := a.socialSessionKey()
 	if err != nil {
-		apiErr := NewError(ErrKeyInternalError, err)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyInternalError, err))
 	}
 
 	session, err := provider.GetSession(c.Request(), key)
 	if err != nil {
-		apiErr := NewError(ErrKeyInternalError, err)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyInternalError, err))
 	}
 
 	// The session is single-use; clear it regardless of the outcome below.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
 
 	if req.State == "" || req.State != session.State {
-		apiErr := NewError(ErrKeyInvalidState, nil)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyInvalidState, nil))
 	}
 
 	if req.Error != "" {
-		apiErr := NewError(ErrKeyProviderError, nil, req.Error)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		// The provider never sends an error code with a usable session; log it
+		// for support but keep the user on a generic screen.
+		ctx.Logger().Warn("social provider returned an error at callback",
+			zap.String("provider", providerName),
+			zap.String("reason", req.Error))
+		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyProviderError, nil, req.Error))
 	}
 
 	if req.Code == "" {
-		apiErr := NewError(ErrKeyMissingAuthCode, nil)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyMissingAuthCode, nil))
 	}
 
 	oauthProvider, err := a.providerStore.GetProvider(providerName)
 	if err != nil {
-		apiErr := NewError(ErrKeyProviderNotEnabled, err)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyProviderNotEnabled, err))
 	}
 
 	user, err := oauthProvider.Exchange(c.Request().Context(), req.Code, session.CodeVerifier)
@@ -305,8 +324,7 @@ func (a *API) socialAuthCallback(c echo.Context) error {
 		ctx.Logger().Warn("social auth code exchange failed",
 			zap.String("provider", providerName),
 			zap.String("reason", reason))
-		apiErr := NewError(ErrKeyProviderExchangeFailed, err)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyProviderExchangeFailed, err))
 	}
 
 	if session.Mode == provider.SessionModeLink {
@@ -420,11 +438,7 @@ func (a *API) completeSocialLink(ctx httputil.RequestContext, providerName strin
 	}
 
 	if err := a.socialAuth.LinkAccount(ctx.Request().Context(), session.UserID, providerName, user.ProviderUserID, user.Email); err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			return ctx.Error(acctErr, acctErr.HttpStatus())
-		}
-		return ctx.Error(err, http.StatusInternalServerError)
+		return a.socialErrorPage(ctx, providerName, err)
 	}
 
 	target := session.ReturnURL
@@ -470,29 +484,32 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 		// both identities. The identity is NOT linked silently: the user must
 		// confirm on a consent page first (a provider misreporting email
 		// verification must not let anyone take over an existing account).
-		// Unverified emails keep the conflict rejection.
+		// Unverified emails keep the conflict rejection, shown as an error
+		// screen explaining how to link the provider from account settings.
 		if user.EmailVerified && core.IsAccountError(err) &&
 			core.AsAccountError(err).IsErrorType(core.ErrKeySocialEmailConflict) {
 			if ok, promptErr := a.promptLinkConsent(ctx, providerName, user, returnUrl); promptErr != nil {
-				return a.socialError(ctx, promptErr)
+				return a.socialErrorPage(ctx, providerName, promptErr)
 			} else if ok {
 				return nil
 			}
+			// ok=false: the email no longer maps to an account, so the
+			// original conflict stands — rendered as the error screen.
 		}
-		return a.socialError(ctx, err)
+		return a.socialErrorPage(ctx, providerName, err)
 	}
 
 	// If the provider did not confirm the email, the account is created
 	// unverified and must be verified before a session is established.
 	if !result.EmailVerified {
 		if err := a.user.SendEmailVerification(ctx.Request().Context(), result.User.ID); err != nil {
-			return a.socialError(ctx, err)
+			return a.socialErrorPage(ctx, providerName, err)
 		}
 		http.Redirect(ctx.Response(), ctx.Request(), "/account/verify", http.StatusFound)
 		return nil
 	}
 
-	return a.loginAndRedirect(ctx, result.User.ID, returnUrl)
+	return a.loginAndRedirect(ctx, providerName, result.User.ID, returnUrl)
 }
 
 // promptLinkConsent handles a verified-email conflict during login by parking
@@ -508,7 +525,7 @@ func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string
 
 	key, err := a.socialSessionKey()
 	if err != nil {
-		return false, a.writeInternalError(ctx, err)
+		return false, err
 	}
 
 	session := &provider.SocialAuthSession{
@@ -519,7 +536,7 @@ func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string
 		Email:          user.Email,
 	}
 	if err := provider.SaveSession(ctx.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
-		return false, a.writeInternalError(ctx, err)
+		return false, err
 	}
 
 	http.Redirect(ctx.Response(), ctx.Request(), socialConsentPath(providerName), http.StatusFound)
@@ -698,11 +715,12 @@ func (a *API) loginRedirectURI(ctx httputil.RequestContext, userID uint, returnU
 }
 
 // loginAndRedirect establishes a session for the user and redirects to the
-// auth-complete endpoint.
-func (a *API) loginAndRedirect(ctx httputil.RequestContext, userID uint, returnUrl string) error {
+// auth-complete endpoint. Only reached from browser flows, so failures render
+// the sign-in error screen.
+func (a *API) loginAndRedirect(ctx httputil.RequestContext, providerName string, userID uint, returnUrl string) error {
 	redirectURL, err := a.loginRedirectURI(ctx, userID, returnUrl)
 	if err != nil {
-		return a.socialError(ctx, err)
+		return a.socialErrorPage(ctx, providerName, err)
 	}
 
 	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
@@ -715,19 +733,68 @@ func socialConsentPath(providerName string) string {
 	return fmt.Sprintf("/api/account/auth/sso/%s/consent", providerName)
 }
 
+// socialErrorPage renders the user-facing sign-in error screen that replaces
+// raw JSON error bodies across the browser-driven OAuth callback flow. The
+// mapped HTTP status is preserved, but the body is always a styled HTML page
+// that never echoes provider, token, or internal error details — those stay
+// in the server log (see the exchange-failure logging in socialAuthCallback).
+// Known account conflicts (email already in use, provider already linked to
+// another account) get specific, actionable copy; everything else gets a
+// generic message.
+func (a *API) socialErrorPage(ctx httputil.RequestContext, providerName string, err error) error {
+	displayName := a.providerDisplayName(ctx, providerName)
+	heading := "Sign-in could not be completed"
+	message := "Something went wrong signing in with " + displayName +
+		". Please try again or use another sign-in method."
+
+	status := http.StatusInternalServerError
+	var httpStatuser interface{ HttpStatus() int }
+
+	switch {
+	case errors.As(err, &httpStatuser):
+		status = httpStatuser.HttpStatus()
+	}
+
+	acctErr := core.AsAccountError(err)
+	if acctErr != nil {
+		switch {
+		case acctErr.IsErrorType(core.ErrKeySocialEmailConflict):
+			heading = "Email already in use"
+			message = "The email on your " + displayName + " account is already " +
+				"associated with another account. Sign in with that account and " +
+				"link " + displayName + " from your account settings."
+		case acctErr.IsErrorType(core.ErrKeySocialAlreadyLinked):
+			heading = "Account already linked"
+			message = "This " + displayName + " account is already linked to " +
+				"another account."
+		}
+	}
+
+	responseHeader := ctx.Response().Header()
+	responseHeader.Set("Content-Type", "text/html; charset=utf-8")
+	ctx.Response().WriteHeader(status)
+	return socialErrorTemplate.ExecuteTemplate(ctx.Response().Writer, "error", socialLayoutData{
+		AriaLabelledBy:  "error-heading",
+		AriaDescribedBy: "error-description",
+		MetaDescription: "Sign-in error",
+		PageData: socialErrorPageData{
+			Heading:     heading,
+			Message:     message,
+			ActionURL:   "/",
+			ActionLabel: "Back to sign in",
+		},
+	})
+}
+
 // socialError maps an account error to its HTTP status, else a 500.
+// Only for API endpoints called by non-browser clients (consent submit fetch);
+// browser-driven flows must use socialErrorPage instead.
 func (a *API) socialError(ctx httputil.RequestContext, err error) error {
 	if core.IsAccountError(err) {
 		acctErr := core.AsAccountError(err)
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 	return ctx.Error(err, http.StatusInternalServerError)
-}
-
-// writeInternalError writes an internal-error response in this namespace.
-func (a *API) writeInternalError(ctx httputil.RequestContext, err error) error {
-	apiErr := NewError(ErrKeyInternalError, err)
-	return ctx.Error(apiErr, apiErr.HttpStatus())
 }
 
 func (a *API) socialAuthLogout(c echo.Context) error {
