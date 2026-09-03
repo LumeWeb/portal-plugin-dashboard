@@ -471,6 +471,13 @@ func (a *API) sanitizeReturnURL(returnURL, host string) string {
 		return ""
 	}
 
+	// Browsers normalize "\" to "/" in special-scheme URLs, so a path like
+	// "/\evil.com" (Host=="" per url.Parse) becomes a protocol-relative
+	// redirect. Backslashes have no legitimate use here.
+	if strings.Contains(returnURL, "\\") {
+		return ""
+	}
+
 	if parsedURL.Host == "" ||
 		parsedURL.Hostname() == (&url.URL{Host: host}).Hostname() ||
 		parsedURL.Hostname() == (&url.URL{Host: cfg.Domain}).Hostname() {
@@ -484,6 +491,14 @@ func (a *API) sanitizeReturnURL(returnURL, host string) string {
 // Returns true for paths starting with "/" but not "//", false otherwise.
 func (a *API) isValidReturnURL(returnUrl string) bool {
 	if returnUrl == "" {
+		return false
+	}
+
+	// Browsers normalize "\" to "/" in special-scheme URLs, so a path like
+	// "/\evil.com" (Host=="" per url.Parse) would bypass the "//" check yet
+	// become a protocol-relative redirect. Backslashes have no legitimate use
+	// in a redirect target.
+	if strings.Contains(returnUrl, "\\") {
 		return false
 	}
 
