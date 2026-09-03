@@ -104,6 +104,58 @@ func TestKeyIdentityRegister_AnonAccount_Success(t *testing.T) {
 	})
 }
 
+// TestKeyIdentityRegister_OTPJSONResponse keeps new_account on the wire for
+// the JSON (OTP) response path: EncodeResponse routes through FromModel,
+// which must propagate the flag.
+func TestKeyIdentityRegister_OTPJSONResponse(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		ensureSolanaHandlerRegistered()
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		userSvc := core.GetService[*coreTesting.MockUserService](ctx, core.USER_SERVICE)
+
+		key, priv := solanaTestKey(tb)
+		message, signature := issueAndSignSolanaChallenge(tb, ctx, key, priv)
+
+		anonUser := &models.User{
+			Model:      gorm.Model{ID: 7},
+			Email:      core.AnonEmail(key),
+			OTPEnabled: true,
+		}
+		testToken := CreateTestLoginToken(tb, ctx, "7")
+
+		userSvc.EXPECT().KeyIdentityExists(mock.Anything, "solana", key).Return(false, nil, nil).Once()
+		userSvc.EXPECT().CreateAccount(
+			mock.Anything, core.AnonEmail(key), mock.Anything, false, mock.Anything,
+		).Return(anonUser, nil).Once()
+		userSvc.EXPECT().UpdateAccountInfo(mock.Anything, uint(7), mock.Anything).Return(nil).Once()
+		userSvc.EXPECT().AddKeyIdentity(mock.Anything, uint(7), "solana", key, mock.Anything).Return(nil).Once()
+		authSvc.MockAuthService.EXPECT().LoginID(
+			mock.Anything, uint(7), mock.Anything, false,
+		).Return(testToken, nil).Once()
+
+		reqBody := dto.KeyIdentityVerifyRequest{
+			KeyType:   "solana",
+			Key:       key,
+			Message:   message,
+			Signature: signature,
+			Remember:  false,
+		}
+		body, err := json.Marshal(reqBody)
+		require.NoError(tb, err)
+
+		w := requestKeyIdentity(tb, ctx, "POST", "/api/auth/key/verify", body)
+
+		require.Equal(tb, http.StatusOK, w.Code, "body: %s", w.Body.String())
+		var resp dto.KeyIdentityVerifyResponse
+		require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(tb, testToken, resp.Token)
+		assert.True(tb, resp.Otp)
+		assert.True(tb, resp.NewAccount, "new_account must survive FromModel/EncodeResponse")
+		userSvc.AssertExpectations(tb)
+		authSvc.AssertExpectations(tb)
+	})
+}
+
 // TestKeyIdentityRegister_InvalidProof ensures a valid signature from the
 // wrong key fails proof verification instead of creating an account.
 func TestKeyIdentityRegister_InvalidProof(t *testing.T) {

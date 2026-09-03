@@ -104,6 +104,7 @@ type KeyIdentityVerifyResponse struct {
 func (r *KeyIdentityVerifyResponse) FromModel(model *KeyIdentityVerifyResponse) error {
 	r.Token = model.Token
 	r.Otp = model.Otp
+	r.NewAccount = model.NewAccount
 	return nil
 }
 
