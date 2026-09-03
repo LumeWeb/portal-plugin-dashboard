@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -265,6 +266,81 @@ func TestKeyIdentityVerify_Success(t *testing.T) {
 		assert.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
 		authSvc.AssertExpectations(tb)
 	})
+}
+
+func TestKeyIdentityVerify_ReturnURL(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		ensureEthereumHandlerRegistered()
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+		router := ctx.Router()
+		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		key := "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+		testToken := CreateTestLoginToken(tb, ctx, "1")
+
+		authSvc.MockAuthService.EXPECT().LoginKeyIdentityWithContext(
+			mock.Anything, "ethereum", key, mock.Anything, mock.Anything, false,
+		).Return(testToken, nil, nil).Once()
+
+		reqBody := dto.KeyIdentityVerifyRequest{
+			KeyType:   "ethereum",
+			Key:       key,
+			Message:   "test message",
+			Signature: "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001b",
+			Remember:  false,
+		}
+
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/auth/key/verify?return=/onboarding/step-2", bytes.NewReader(body))
+		req.Host = domain
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(tb, http.StatusFound, w.Code)
+		assert.Equal(tb, "/onboarding/step-2", parseAuthCompleteReturn(tb, w.Header().Get("Location")))
+		authSvc.AssertExpectations(tb)
+	})
+}
+
+func TestKeyIdentityVerify_InvalidReturnURL(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		ensureEthereumHandlerRegistered()
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+		router := ctx.Router()
+		domain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		key := "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+
+		reqBody := dto.KeyIdentityVerifyRequest{
+			KeyType:   "ethereum",
+			Key:       key,
+			Message:   "test message",
+			Signature: "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001b",
+			Remember:  false,
+		}
+
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/auth/key/verify?return=https://evil.example.org/x", bytes.NewReader(body))
+		req.Host = domain
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(tb, http.StatusBadRequest, w.Code)
+		assert.Contains(tb, w.Body.String(), "Invalid return URL.")
+	})
+}
+
+// parseAuthCompleteReturn extracts the sanitized `return` query value from an
+// auth-complete Location header.
+func parseAuthCompleteReturn(tb coreTesting.TB, location string) string {
+	u, err := url.Parse(location)
+	require.NoError(tb, err)
+	return u.Query().Get("return")
 }
 
 func TestKeyIdentityVerify_OTPEnabled(t *testing.T) {

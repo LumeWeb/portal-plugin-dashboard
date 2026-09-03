@@ -33,6 +33,7 @@ func (a *API) buildOTPRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.Mid
 				router.WithoutDefaultSuccessResponse(),
 				router.WithSummary("Validate OTP code"),
 				router.WithDescription("Validates an OTP code to complete 2FA login."),
+				router.WithQueryParam("return", "URL to redirect to after completion", "/onboarding"),
 				router.WithRequestBody(dto.OTPValidateRequest{}, "OTP code", true),
 				router.WithSuccessResponse(http.StatusFound, "Redirect to auth complete (on success)",
 					router.WithHeader("Location", "URL to redirect to"),
@@ -153,7 +154,15 @@ func (a *API) otpValidate(c echo.Context) error {
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
-	redirectURL := a.buildAuthCompleteURL(_jwt, "")
+	// The `return` query parameter is threaded by the client from the 2FA
+	// entry point (password or key identity verify) so the post-OTP redirect
+	// stays on the same sign-in flow.
+	returnUrl, returnErr := a.requestReturnURL(c)
+	if returnErr != nil {
+		return returnErr
+	}
+
+	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)
 
 	// Set the authentication cookie with the remember flag
 	if err := a.setAuthCookieWithRemember(c, _jwt, remember); err != nil {

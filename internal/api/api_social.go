@@ -185,20 +185,10 @@ func generateCodeChallengeS256(verifier string) string {
 func (a *API) socialAuthLogin(c echo.Context) error {
 	ctx := httputil.Context(c)
 
-	var req dto.SocialLoginQuery
-	if _, ok := httputil.DecodeAndValidateQueryRequest[*dto.SocialLoginQuery, *dto.SocialLoginQuery](ctx, &req); !ok {
-		return nil
-	}
-
 	providerName := c.Param("provider")
-	returnUrl := req.ReturnURL
-	if returnUrl == "" {
-		returnUrl = "/"
-	}
-
-	if !a.isValidReturnURL(returnUrl) {
-		apiErr := NewError(ErrKeyInvalidReturnURL, nil)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+	returnUrl, err := a.requestReturnURL(c)
+	if err != nil {
+		return err
 	}
 
 	oauthProvider, err := a.providerStore.GetProvider(providerName)
@@ -350,19 +340,10 @@ func (a *API) listSocialLinks(c echo.Context) error {
 func (a *API) socialAuthLink(c echo.Context) error {
 	ctx := httputil.Context(c)
 
-	var req dto.SocialLoginQuery
-	if _, ok := httputil.DecodeAndValidateQueryRequest[*dto.SocialLoginQuery, *dto.SocialLoginQuery](ctx, &req); !ok {
-		return nil
-	}
-
 	providerName := c.Param("provider")
-	returnUrl := req.ReturnURL
-	if returnUrl == "" {
-		returnUrl = "/"
-	}
-	if !a.isValidReturnURL(returnUrl) {
-		apiErr := NewError(ErrKeyInvalidReturnURL, nil)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+	returnUrl, returnErr := a.requestReturnURL(c)
+	if returnErr != nil {
+		return returnErr
 	}
 
 	userId, err := mcontext.GetUserID(ctx.Context)
@@ -764,24 +745,4 @@ func (a *API) listPublicProviders(c echo.Context) error {
 	})
 
 	return c.JSON(http.StatusOK, providers)
-}
-
-// isValidReturnURL checks if a return URL is a same-site relative path.
-// Returns true for paths starting with "/" but not "//", false otherwise.
-func (a *API) isValidReturnURL(returnUrl string) bool {
-	if returnUrl == "" {
-		return false
-	}
-
-	// Must start with "/" but not "//" to be a relative path
-	if !strings.HasPrefix(returnUrl, "/") || strings.HasPrefix(returnUrl, "//") {
-		return false
-	}
-
-	// Must not be an absolute URL
-	if strings.Contains(returnUrl, "://") {
-		return false
-	}
-
-	return true
 }
