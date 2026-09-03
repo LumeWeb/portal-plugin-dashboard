@@ -501,14 +501,17 @@ func (a *API) isValidReturnURL(returnUrl string) bool {
 }
 
 // requestReturnURL reads the shared `return` query parameter used by every
-// sign-in launch point (social, key identity, OTP validation), defaults it to
-// "/", and enforces the same-site relative-path policy. On an invalid value it
-// writes the INVALID_RETURN_URL error response and returns an error.
-func (a *API) requestReturnURL(c echo.Context) (string, error) {
+// sign-in launch point (social, key identity, OTP validation) and enforces the
+// same-site relative-path policy. An empty defaultReturn leaves the param
+// unset; callers must keep the unset case reachable so downstream consumers
+// (e.g. the auth-complete JSON token response) keep their documented behavior.
+// On an invalid value it writes the INVALID_RETURN_URL error response and
+// returns an error.
+func (a *API) requestReturnURL(c echo.Context, defaultReturn string) (string, error) {
 	ctx := httputil.Context(c)
 	returnUrl := c.QueryParam("return")
 	if returnUrl == "" {
-		returnUrl = "/"
+		return defaultReturn, nil
 	}
 	if !a.isValidReturnURL(returnUrl) {
 		apiErr := NewError(ErrKeyInvalidReturnURL, nil)

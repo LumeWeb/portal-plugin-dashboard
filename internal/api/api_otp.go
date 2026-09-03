@@ -157,7 +157,7 @@ func (a *API) otpValidate(c echo.Context) error {
 	// The `return` query parameter is threaded by the client from the 2FA
 	// entry point (password or key identity verify) so the post-OTP redirect
 	// stays on the same sign-in flow.
-	returnUrl, returnErr := a.requestReturnURL(c)
+	returnUrl, returnErr := a.requestReturnURL(c, "")
 	if returnErr != nil {
 		return returnErr
 	}

@@ -142,14 +142,12 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
-	// The OTP branch defers the redirect to /api/auth/otp/validate, which must
-	// be called with the same `return` parameter to keep the flow intact.
-	returnUrl, returnErr := a.requestReturnURL(c)
-	if returnErr != nil {
-		return returnErr
-	}
-
 	if user != nil && user.OTPEnabled {
+		// The OTP branch defers the redirect to /api/auth/otp/validate, which
+		// must be called with the same `return` parameter to keep the flow
+		// intact. Return validation is deferred with it so OTP users always
+		// receive the challenge even for an unusable return value.
+
 		// Set short-lived 2FA cookie; do not apply remember-me here
 		if err = a.setAuthCookieWithRemember(c, _jwt, false); err != nil {
 			acctErr := core.NewAccountError(core.ErrKeyInvalidLogin, err)
@@ -166,6 +164,11 @@ func (a *API) keyIdentityVerify(c echo.Context) error {
 		}
 		var responseDto dto.KeyIdentityVerifyResponse
 		return httputil.EncodeResponse(ctx, responseModel, &responseDto)
+	}
+
+	returnUrl, returnErr := a.requestReturnURL(c, "")
+	if returnErr != nil {
+		return returnErr
 	}
 
 	redirectURL := a.buildAuthCompleteURL(_jwt, returnUrl)

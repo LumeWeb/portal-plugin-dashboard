@@ -186,7 +186,7 @@ func (a *API) socialAuthLogin(c echo.Context) error {
 	ctx := httputil.Context(c)
 
 	providerName := c.Param("provider")
-	returnUrl, err := a.requestReturnURL(c)
+	returnUrl, err := a.requestReturnURL(c, "/")
 	if err != nil {
 		return err
 	}
@@ -341,7 +341,7 @@ func (a *API) socialAuthLink(c echo.Context) error {
 	ctx := httputil.Context(c)
 
 	providerName := c.Param("provider")
-	returnUrl, returnErr := a.requestReturnURL(c)
+	returnUrl, returnErr := a.requestReturnURL(c, "/")
 	if returnErr != nil {
 		return returnErr
 	}

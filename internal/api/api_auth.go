@@ -163,7 +163,7 @@ func (a *API) login(c echo.Context) error {
 
 	// The OTP branch defers the redirect to /api/auth/otp/validate, which must
 	// be called with the same `return` parameter to keep the flow intact.
-	returnUrl, returnErr := a.requestReturnURL(c)
+	returnUrl, returnErr := a.requestReturnURL(c, "")
 	if returnErr != nil {
 		return returnErr
 	}
