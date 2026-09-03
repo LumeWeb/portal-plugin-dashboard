@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -107,6 +108,73 @@ func TestFinishSocialLogin_ExistingLinkLogsIn(t *testing.T) {
 		require.NoError(tb, err)
 		require.Equal(tb, http.StatusFound, w.Code)
 		require.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
+	}, socialTestOptions)
+}
+
+// The auth-complete redirect must target the dashboard API subdomain, not the
+// bare core domain: /api/auth/complete is a global path served on every
+// hostname, so sending the browser to the main domain after SSO would drop it
+// on the homepage instead of the account site the flow started from.
+func TestFinishSocialLogin_RedirectsToAPISubdomain(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+
+		mockUser := &models.User{Model: gorm.Model{ID: 9}, Email: "subdomain@example.com"}
+		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-9", "subdomain@example.com", false).
+			Return(&core.SocialAuthResult{User: mockUser, EmailVerified: true}, nil)
+		loginToken := CreateTestLoginToken(tb, ctx, "9")
+		authSvc.EXPECT().LoginID(mock.Anything, uint(9), mock.Anything, false).Return(loginToken, nil)
+
+		reqCtx, w := newSocialTestContext(t)
+		err := api.finishSocialLogin(reqCtx, "google",
+			&provider.OAuth2User{ProviderUserID: "uid-9", Email: "subdomain@example.com"}, "/")
+		require.NoError(tb, err)
+		require.Equal(tb, http.StatusFound, w.Code)
+
+		loc, err := url.Parse(w.Header().Get("Location"))
+		require.NoError(tb, err)
+		require.Equal(tb, httpSvc.APISubdomain(internal.PLUGIN_NAME, false), loc.Host)
+	}, socialTestOptions)
+}
+
+// Absolute return URLs targeting either hostname the global auth-complete
+// route serves (the API subdomain and the core domain) must survive
+// same-origin sanitization; foreign hosts are dropped.
+func TestBuildAuthCompleteURL_SameOriginReturn(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api := core.GetAPI(internal.PLUGIN_NAME).(*API)
+		domain := ctx.Config().Config().Core.Domain
+		httpSvc := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE)
+		subdomain := httpSvc.APISubdomain(internal.PLUGIN_NAME, false)
+
+		// Relative return URL is preserved.
+		returnURL, err := url.Parse(api.buildAuthCompleteURL("", "/dashboard"))
+		require.NoError(tb, err)
+		require.Equal(tb, "/dashboard", returnURL.Query().Get("return"))
+
+		// Core-domain absolute return URL (accepted before the subdomain
+		// redirect change) is still accepted.
+		returnURL, err = url.Parse(api.buildAuthCompleteURL("", "https://"+domain+"/dashboard"))
+		require.NoError(tb, err)
+		require.Equal(tb, "https://"+domain+"/dashboard", returnURL.Query().Get("return"))
+
+		// API-subdomain return URL is accepted as the redirect target origin.
+		returnURL, err = url.Parse(api.buildAuthCompleteURL("", "https://"+subdomain+"/settings"))
+		require.NoError(tb, err)
+		require.Equal(tb, "https://"+subdomain+"/settings", returnURL.Query().Get("return"))
+
+		// Core-domain return URL on a non-standard port still matches by
+		// hostname (a frontend may omit the port when building the URL).
+		returnURL, err = url.Parse(api.buildAuthCompleteURL("", "https://"+domain+":8443/dashboard"))
+		require.NoError(tb, err)
+		require.Equal(tb, "https://"+domain+":8443/dashboard", returnURL.Query().Get("return"))
+
+		// Foreign-host return URLs are dropped.
+		returnURL, err = url.Parse(api.buildAuthCompleteURL("", "https://evil.example.org/x"))
+		require.NoError(tb, err)
+		require.Empty(tb, returnURL.Query().Get("return"))
 	}, socialTestOptions)
 }
 

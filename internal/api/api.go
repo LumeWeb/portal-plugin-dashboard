@@ -402,8 +402,14 @@ func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
 		port = cfg.Port
 	}
 
-	// Build host with port if needed
+	// Build host with port if needed. The auth-complete path is registered as
+	// a global path, so it resolves on any hostname; prefer this API's own
+	// subdomain (e.g. account.<domain>) so post-login redirects land back on
+	// the site the login flow started from instead of the main-domain root.
 	host := cfg.Domain
+	if sub := a.http.APISubdomain(a.Name(), false); sub != "" {
+		host = sub
+	}
 	if port != 0 && port != 443 && port != 80 {
 		host = fmt.Sprintf("%s:%d", host, port)
 	}
@@ -418,8 +424,14 @@ func (a *API) buildAuthCompleteURL(token string, returnURL string) string {
 	var sanitizedReturn string
 	if returnURL != "" {
 		if parsedURL, err := url.Parse(returnURL); err == nil {
-			// Only allow relative paths or same-origin URLs
-			if parsedURL.Host == "" || parsedURL.Host == host {
+			// Only allow relative paths or same-origin URLs on either of the
+			// hostnames the auth-complete route serves: the chosen redirect
+			// host and the bare core domain. Compare by hostname so a return
+			// URL built without an explicit port (relying on the default)
+			// still matches a port-qualified host.
+			if parsedURL.Host == "" ||
+				parsedURL.Hostname() == (&url.URL{Host: host}).Hostname() ||
+				parsedURL.Hostname() == (&url.URL{Host: cfg.Domain}).Hostname() {
 				sanitizedReturn = parsedURL.String()
 			}
 		}
