@@ -25,8 +25,8 @@ require (
 	go.lumeweb.com/portal-middleware v0.3.7
 	go.lumeweb.com/portal-router v0.7.7
 	go.lumeweb.com/queryutil v0.3.19
-	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260901072240-862a4f22dd15
-	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260901072240-862a4f22dd15
+	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260904063331-5621276e9357
+	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260904063331-5621276e9357
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.55.0
 	golang.org/x/image v0.34.0
