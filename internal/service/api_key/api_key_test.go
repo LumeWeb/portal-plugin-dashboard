@@ -509,3 +509,92 @@ func TestAPIKeyService_ValidateAPIKey_Expired(t *testing.T) {
 		assert.Nil(tb, validatedKey)
 	})
 }
+
+func TestAPIKeyService_ValidateAPIKey_RecordsLastUsed(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, apiKeyService)
+
+		userID := uint(1)
+
+		// Create a non-expiring key
+		key, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Used Key")
+		require.NoError(tb, err)
+		require.NotNil(tb, key)
+
+		beforeValidate := time.Now().Add(-1 * time.Second)
+
+		validatedKey, err := apiKeyService.ValidateAPIKey(context.Background(), userID, key.UUID.ToUUID())
+		require.NoError(tb, err)
+		require.NotNil(tb, validatedKey)
+		require.NotNil(tb, validatedKey.LastUsedAt)
+		assert.False(tb, validatedKey.LastUsedAt.Before(beforeValidate))
+
+		// Verify the timestamp was persisted
+		var fetchedKey pluginDb.APIKey
+		result := ctx.DB().First(&fetchedKey, key.ID)
+		require.NoError(tb, result.Error)
+		require.NotNil(tb, fetchedKey.LastUsedAt)
+		assert.False(tb, fetchedKey.LastUsedAt.Before(beforeValidate))
+	})
+}
+
+func TestAPIKeyService_ValidateAPIKey_ExpiredDoesNotRecordLastUsed(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, apiKeyService)
+
+		userID := uint(1)
+
+		// Create a key that has already expired
+		key, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Expired No Usage Key")
+		require.NoError(tb, err)
+		require.NotNil(tb, key)
+
+		pastTime := time.Now().Add(-1 * time.Hour)
+		key.Expires = &pastTime
+		ctx.DB().Save(key)
+
+		_, err = apiKeyService.ValidateAPIKey(context.Background(), userID, key.UUID.ToUUID())
+		require.Error(tb, err)
+
+		// Failed validation must not record usage
+		var fetchedKey pluginDb.APIKey
+		result := ctx.DB().First(&fetchedKey, key.ID)
+		require.NoError(tb, result.Error)
+		assert.Nil(tb, fetchedKey.LastUsedAt)
+	})
+}
+
+func TestAPIKeyService_RecordAPIKeyUsage(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, apiKeyService)
+
+		userID := uint(1)
+		key, err := apiKeyService.CreateAPIKey(context.Background(), userID, "Usage Key")
+		require.NoError(tb, err)
+
+		before := time.Now().Add(-1 * time.Second)
+
+		err = apiKeyService.RecordAPIKeyUsage(context.Background(), userID, key.UUID.ToUUID())
+		require.NoError(tb, err)
+
+		var fetchedKey pluginDb.APIKey
+		result := ctx.DB().First(&fetchedKey, key.ID)
+		require.NoError(tb, result.Error)
+		require.NotNil(tb, fetchedKey.LastUsedAt)
+		assert.False(tb, fetchedKey.LastUsedAt.Before(before))
+	})
+}
+
+func TestAPIKeyService_RecordAPIKeyUsage_UnknownKey(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		apiKeyService := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, apiKeyService)
+
+		// Recording usage for a key/scoped user that does not exist is a no-op
+		err := apiKeyService.RecordAPIKeyUsage(context.Background(), uint(1), uuid.New())
+		require.NoError(tb, err)
+	})
+}

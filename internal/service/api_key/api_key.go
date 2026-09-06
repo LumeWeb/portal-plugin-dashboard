@@ -144,6 +144,31 @@ func (s *APIKeyServiceDefault) DeleteAPIKey(ctx context.Context, userID uint, ke
 	)
 }
 
+// RecordAPIKeyUsage stamps last_used_at for the given key. Callers (auth
+// middleware key loggers) must tolerate failures, so errors are logged here
+// and returned without wrapping.
+func (s *APIKeyServiceDefault) RecordAPIKeyUsage(ctx context.Context, userID uint, keyUUID uuid.UUID) error {
+	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.RecordAPIKeyUsage")
+	defer span.End()
+
+	return core.MetricTrack(
+		Duration.WithLabelValues(LabelOpUsage),
+		Errors.WithLabelValues(LabelOpUsage),
+		func() error {
+			err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&pluginDb.APIKey{}).
+					Where(&pluginDb.APIKey{UUID: types.FromUUID(keyUUID), UserID: userID}).
+					Update("last_used_at", time.Now())
+			})
+			if err != nil {
+				s.Logger().Error("failed to record api key usage", zap.Error(err))
+				return err
+			}
+			return nil
+		},
+	)
+}
+
 func (s *APIKeyServiceDefault) ValidateAPIKey(ctx context.Context, userID uint, keyUUID uuid.UUID) (*pluginDb.APIKey, error) {
 	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.ValidateAPIKey")
 	defer span.End()
@@ -166,6 +191,17 @@ func (s *APIKeyServiceDefault) ValidateAPIKey(ctx context.Context, userID uint, 
 			if apiKey.Expires != nil && apiKey.Expires.Before(time.Now()) {
 				return nil, fmt.Errorf("invalid api key")
 			}
+
+			// Record usage. The key already authenticated, so a failed usage write is
+			// logged but must not fail the request.
+			lastUsed := time.Now()
+			err = db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&pluginDb.APIKey{}).Where("id = ?", apiKey.ID).Update("last_used_at", lastUsed)
+			})
+			if err != nil {
+				s.Logger().Error("failed to record api key usage", zap.Error(err))
+			}
+			apiKey.LastUsedAt = &lastUsed
 
 			return &apiKey, nil
 		},

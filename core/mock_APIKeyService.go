@@ -172,7 +172,7 @@ type MockAPIKeyService_CreateAPIKey_Call struct {
 //   - ctx context.Context
 //   - userID uint
 //   - name string
-func (_e *MockAPIKeyService_Expecter) CreateAPIKey(ctx interface{}, userID interface{}, name interface{}) *MockAPIKeyService_CreateAPIKey_Call {
+func (_e *MockAPIKeyService_Expecter) CreateAPIKey(ctx any, userID any, name any) *MockAPIKeyService_CreateAPIKey_Call {
 	return &MockAPIKeyService_CreateAPIKey_Call{Call: _e.mock.On("CreateAPIKey", ctx, userID, name)}
 }
 
@@ -281,7 +281,7 @@ type MockAPIKeyService_DeleteAPIKey_Call struct {
 //   - ctx context.Context
 //   - userID uint
 //   - uuid1 uuid.UUID
-func (_e *MockAPIKeyService_Expecter) DeleteAPIKey(ctx interface{}, userID interface{}, uuid1 interface{}) *MockAPIKeyService_DeleteAPIKey_Call {
+func (_e *MockAPIKeyService_Expecter) DeleteAPIKey(ctx any, userID any, uuid1 any) *MockAPIKeyService_DeleteAPIKey_Call {
 	return &MockAPIKeyService_DeleteAPIKey_Call{Call: _e.mock.On("DeleteAPIKey", ctx, userID, uuid1)}
 }
 
@@ -363,7 +363,7 @@ type MockAPIKeyService_GetAPIKeys_Call struct {
 //   - filters []queryutil.CrudFilter
 //   - sorts []queryutil.Sort
 //   - pagination queryutil.Pagination
-func (_e *MockAPIKeyService_Expecter) GetAPIKeys(ctx interface{}, userID interface{}, filters interface{}, sorts interface{}, pagination interface{}) *MockAPIKeyService_GetAPIKeys_Call {
+func (_e *MockAPIKeyService_Expecter) GetAPIKeys(ctx any, userID any, filters any, sorts any, pagination any) *MockAPIKeyService_GetAPIKeys_Call {
 	return &MockAPIKeyService_GetAPIKeys_Call{Call: _e.mock.On("GetAPIKeys", ctx, userID, filters, sorts, pagination)}
 }
 
@@ -500,6 +500,69 @@ func (_c *MockAPIKeyService_Logger_Call) RunAndReturn(run func() *core.Logger) *
 	return _c
 }
 
+// RecordAPIKeyUsage provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) RecordAPIKeyUsage(ctx context.Context, userID uint, keyUUID uuid.UUID) error {
+	ret := _mock.Called(ctx, userID, keyUUID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordAPIKeyUsage")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, userID, keyUUID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockAPIKeyService_RecordAPIKeyUsage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordAPIKeyUsage'
+type MockAPIKeyService_RecordAPIKeyUsage_Call struct {
+	*mock.Call
+}
+
+// RecordAPIKeyUsage is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - keyUUID uuid.UUID
+func (_e *MockAPIKeyService_Expecter) RecordAPIKeyUsage(ctx any, userID any, keyUUID any) *MockAPIKeyService_RecordAPIKeyUsage_Call {
+	return &MockAPIKeyService_RecordAPIKeyUsage_Call{Call: _e.mock.On("RecordAPIKeyUsage", ctx, userID, keyUUID)}
+}
+
+func (_c *MockAPIKeyService_RecordAPIKeyUsage_Call) Run(run func(ctx context.Context, userID uint, keyUUID uuid.UUID)) *MockAPIKeyService_RecordAPIKeyUsage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_RecordAPIKeyUsage_Call) Return(err error) *MockAPIKeyService_RecordAPIKeyUsage_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockAPIKeyService_RecordAPIKeyUsage_Call) RunAndReturn(run func(ctx context.Context, userID uint, keyUUID uuid.UUID) error) *MockAPIKeyService_RecordAPIKeyUsage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SetConfig provides a mock function for the type MockAPIKeyService
 func (_mock *MockAPIKeyService) SetConfig(cfg config.Manager) {
 	_mock.Called(cfg)
@@ -513,7 +576,7 @@ type MockAPIKeyService_SetConfig_Call struct {
 
 // SetConfig is a helper method to define mock.On call
 //   - cfg config.Manager
-func (_e *MockAPIKeyService_Expecter) SetConfig(cfg interface{}) *MockAPIKeyService_SetConfig_Call {
+func (_e *MockAPIKeyService_Expecter) SetConfig(cfg any) *MockAPIKeyService_SetConfig_Call {
 	return &MockAPIKeyService_SetConfig_Call{Call: _e.mock.On("SetConfig", cfg)}
 }
 
@@ -553,7 +616,7 @@ type MockAPIKeyService_SetContext_Call struct {
 
 // SetContext is a helper method to define mock.On call
 //   - ctx core.Context
-func (_e *MockAPIKeyService_Expecter) SetContext(ctx interface{}) *MockAPIKeyService_SetContext_Call {
+func (_e *MockAPIKeyService_Expecter) SetContext(ctx any) *MockAPIKeyService_SetContext_Call {
 	return &MockAPIKeyService_SetContext_Call{Call: _e.mock.On("SetContext", ctx)}
 }
 
@@ -593,7 +656,7 @@ type MockAPIKeyService_SetDB_Call struct {
 
 // SetDB is a helper method to define mock.On call
 //   - db *gorm.DB
-func (_e *MockAPIKeyService_Expecter) SetDB(db interface{}) *MockAPIKeyService_SetDB_Call {
+func (_e *MockAPIKeyService_Expecter) SetDB(db any) *MockAPIKeyService_SetDB_Call {
 	return &MockAPIKeyService_SetDB_Call{Call: _e.mock.On("SetDB", db)}
 }
 
@@ -633,7 +696,7 @@ type MockAPIKeyService_SetLogger_Call struct {
 
 // SetLogger is a helper method to define mock.On call
 //   - logger *core.Logger
-func (_e *MockAPIKeyService_Expecter) SetLogger(logger interface{}) *MockAPIKeyService_SetLogger_Call {
+func (_e *MockAPIKeyService_Expecter) SetLogger(logger any) *MockAPIKeyService_SetLogger_Call {
 	return &MockAPIKeyService_SetLogger_Call{Call: _e.mock.On("SetLogger", logger)}
 }
 
@@ -697,7 +760,7 @@ type MockAPIKeyService_ValidateAPIKey_Call struct {
 //   - ctx context.Context
 //   - userID uint
 //   - keyUUID uuid.UUID
-func (_e *MockAPIKeyService_Expecter) ValidateAPIKey(ctx interface{}, userID interface{}, keyUUID interface{}) *MockAPIKeyService_ValidateAPIKey_Call {
+func (_e *MockAPIKeyService_Expecter) ValidateAPIKey(ctx any, userID any, keyUUID any) *MockAPIKeyService_ValidateAPIKey_Call {
 	return &MockAPIKeyService_ValidateAPIKey_Call{Call: _e.mock.On("ValidateAPIKey", ctx, userID, keyUUID)}
 }
 
