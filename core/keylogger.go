@@ -63,10 +63,11 @@ func (l *apiKeyUsageLogger) RecordAccess(c echo.Context, _ string, purpose jwt.P
 		return
 	}
 
-	usageErr := core.WithService[APIKeyService](l.ctx, API_KEY_SERVICE, func(svc APIKeyService) error {
-		return svc.RecordAPIKeyUsage(c.Request().Context(), uint(userID), keyID)
-	})
-	if usageErr != nil {
-		l.ctx.Logger().Error("failed to record api key usage", zap.Error(usageErr), zap.Uint64("user_id", userID))
+	svc := core.GetServiceOptional[APIKeyService](l.ctx, API_KEY_SERVICE)
+	if svc == nil {
+		return // no-op when the dashboard plugin is not loaded
+	}
+	if err := svc.RecordAPIKeyUsage(c.Request().Context(), uint(userID), keyID); err != nil {
+		l.ctx.Logger().Error("failed to record api key usage", zap.Error(err), zap.Uint64("user_id", userID))
 	}
 }
