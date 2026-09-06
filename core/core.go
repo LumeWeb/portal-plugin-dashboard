@@ -17,6 +17,10 @@ type APIKeyService interface {
 	GetAPIKeys(ctx context.Context, userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.APIKey, int64, error)
 	DeleteAPIKey(ctx context.Context, userID uint, uuid uuid.UUID) error
 	ValidateAPIKey(ctx context.Context, userID uint, keyUUID uuid.UUID) (*models.APIKey, error)
+	// RecordAPIKeyUsage stamps the key's last-used timestamp. It is invoked by
+	// the auth middleware key logger (see NewAPIKeyUsageLogger) whenever a
+	// purpose-"api" token is consumed, so it runs on the request hot path.
+	RecordAPIKeyUsage(ctx context.Context, userID uint, keyUUID uuid.UUID) error
 }
 
 const SOCIAL_PROVIDER_SERVICE = "social_provider"

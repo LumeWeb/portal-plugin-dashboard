@@ -14,6 +14,7 @@ const (
 const (
 	LabelOpCreate   = "create"
 	LabelOpDelete   = "delete"
+	LabelOpUsage    = "usage"
 	LabelOpValidate = "validate"
 )
 

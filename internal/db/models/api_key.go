@@ -15,8 +15,9 @@ type APIKey struct {
 	UUID    types.BinaryUUID `gorm:"index;unique"`   // Unique identifier for the key
 	UserID  uint             `gorm:"not null;index"` // Associated user ID
 	User    models.User
-	Expires *time.Time `gorm:"index"` // Optional expiration time (nil means never expires)
-	JWT     string     `gorm:"-"`     // Transient field for generated JWT
+	Expires    *time.Time `gorm:"index"` // Optional expiration time (nil means never expires)
+	LastUsedAt *time.Time // Last time the key passed validation
+	JWT        string     `gorm:"-"` // Transient field for generated JWT
 }
 
 // BeforeCreate generates UUID before creating record

@@ -28,7 +28,8 @@ type APIKeyCreateRequest struct {
 }
 
 type APIKeyFilterRequest struct {
-	Name string `json:"name" filter:"true"`
+	Name       string     `json:"name" filter:"true"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty" filter:"true" sort:"true"`
 }
 
 type UpdateProfileRequest struct {
@@ -100,9 +101,10 @@ func (r *UploadLimitResponse) FromModel(model *UploadLimitResponse) error {
 }
 
 type APIKeyResponse struct {
-	UUID      types.BinaryUUID `json:"uuid"`
-	Name      string           `json:"name"`
-	CreatedAt time.Time        `json:"created_at"`
+	UUID       types.BinaryUUID `json:"uuid"`
+	Name       string           `json:"name"`
+	CreatedAt  time.Time        `json:"created_at"`
+	LastUsedAt *time.Time       `json:"last_used_at,omitempty"`
 }
 
 // APIKeyListResponse is a swagger-only DTO that represents the paginated response for API keys.
@@ -122,6 +124,7 @@ func (r *APIKeyResponse) FromModel(key *pluginDb.APIKey) error {
 	r.UUID = key.UUID
 	r.Name = key.Name
 	r.CreatedAt = key.CreatedAt
+	r.LastUsedAt = key.LastUsedAt
 	return nil
 }
 
