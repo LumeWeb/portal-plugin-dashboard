@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
@@ -11,9 +12,28 @@ import (
 
 const API_KEY_SERVICE = "api_key"
 
+// IssuedAPIKey is the result of issuing or reissuing an API key. ID is the
+// persistent API key row; Token is the one-time JWT the caller hands to the
+// runtime and then discards.
+type IssuedAPIKey struct {
+	ID        uint
+	Token     string
+	ExpiresAt time.Time
+	UUID      uuid.UUID
+	Name      string
+}
+
 type APIKeyService interface {
 	core.Service
 	CreateAPIKey(ctx context.Context, userID uint, name string) (*models.APIKey, error)
+	// IssueAPIKey creates a new API key and returns the one-time signed token.
+	// The JWT is not persisted; only the row ID and expiry are.
+	IssueAPIKey(ctx context.Context, userID uint, name string, ttl time.Duration) (*IssuedAPIKey, error)
+	// ReissueAPIKey refreshes the JWT for an existing key owned by the user,
+	// used by workspace reconciliation after a restart or before expiry.
+	ReissueAPIKey(ctx context.Context, userID uint, keyID uint, ttl time.Duration) (*IssuedAPIKey, error)
+	// RevokeAPIKey deletes a key owned by the user by numeric row ID.
+	RevokeAPIKey(ctx context.Context, userID uint, keyID uint) error
 	GetAPIKeys(ctx context.Context, userID uint, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.APIKey, int64, error)
 	DeleteAPIKey(ctx context.Context, userID uint, uuid uuid.UUID) error
 	ValidateAPIKey(ctx context.Context, userID uint, keyUUID uuid.UUID) (*models.APIKey, error)
