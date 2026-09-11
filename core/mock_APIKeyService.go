@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	mock "github.com/stretchr/testify/mock"
@@ -454,6 +455,86 @@ func (_c *MockAPIKeyService_ID_Call) RunAndReturn(run func() string) *MockAPIKey
 	return _c
 }
 
+// IssueAPIKey provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) IssueAPIKey(ctx context.Context, userID uint, name string, ttl time.Duration) (*IssuedAPIKey, error) {
+	ret := _mock.Called(ctx, userID, name, ttl)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IssueAPIKey")
+	}
+
+	var r0 *IssuedAPIKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, string, time.Duration) (*IssuedAPIKey, error)); ok {
+		return returnFunc(ctx, userID, name, ttl)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, string, time.Duration) *IssuedAPIKey); ok {
+		r0 = returnFunc(ctx, userID, name, ttl)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*IssuedAPIKey)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, string, time.Duration) error); ok {
+		r1 = returnFunc(ctx, userID, name, ttl)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockAPIKeyService_IssueAPIKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IssueAPIKey'
+type MockAPIKeyService_IssueAPIKey_Call struct {
+	*mock.Call
+}
+
+// IssueAPIKey is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - name string
+//   - ttl time.Duration
+func (_e *MockAPIKeyService_Expecter) IssueAPIKey(ctx any, userID any, name any, ttl any) *MockAPIKeyService_IssueAPIKey_Call {
+	return &MockAPIKeyService_IssueAPIKey_Call{Call: _e.mock.On("IssueAPIKey", ctx, userID, name, ttl)}
+}
+
+func (_c *MockAPIKeyService_IssueAPIKey_Call) Run(run func(ctx context.Context, userID uint, name string, ttl time.Duration)) *MockAPIKeyService_IssueAPIKey_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 time.Duration
+		if args[3] != nil {
+			arg3 = args[3].(time.Duration)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_IssueAPIKey_Call) Return(issuedAPIKey *IssuedAPIKey, err error) *MockAPIKeyService_IssueAPIKey_Call {
+	_c.Call.Return(issuedAPIKey, err)
+	return _c
+}
+
+func (_c *MockAPIKeyService_IssueAPIKey_Call) RunAndReturn(run func(ctx context.Context, userID uint, name string, ttl time.Duration) (*IssuedAPIKey, error)) *MockAPIKeyService_IssueAPIKey_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Logger provides a mock function for the type MockAPIKeyService
 func (_mock *MockAPIKeyService) Logger() *core.Logger {
 	ret := _mock.Called()
@@ -559,6 +640,149 @@ func (_c *MockAPIKeyService_RecordAPIKeyUsage_Call) Return(err error) *MockAPIKe
 }
 
 func (_c *MockAPIKeyService_RecordAPIKeyUsage_Call) RunAndReturn(run func(ctx context.Context, userID uint, keyUUID uuid.UUID) error) *MockAPIKeyService_RecordAPIKeyUsage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ReissueAPIKey provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) ReissueAPIKey(ctx context.Context, userID uint, keyID uint, ttl time.Duration) (*IssuedAPIKey, error) {
+	ret := _mock.Called(ctx, userID, keyID, ttl)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReissueAPIKey")
+	}
+
+	var r0 *IssuedAPIKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, time.Duration) (*IssuedAPIKey, error)); ok {
+		return returnFunc(ctx, userID, keyID, ttl)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, time.Duration) *IssuedAPIKey); ok {
+		r0 = returnFunc(ctx, userID, keyID, ttl)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*IssuedAPIKey)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uint, time.Duration) error); ok {
+		r1 = returnFunc(ctx, userID, keyID, ttl)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockAPIKeyService_ReissueAPIKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReissueAPIKey'
+type MockAPIKeyService_ReissueAPIKey_Call struct {
+	*mock.Call
+}
+
+// ReissueAPIKey is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - keyID uint
+//   - ttl time.Duration
+func (_e *MockAPIKeyService_Expecter) ReissueAPIKey(ctx any, userID any, keyID any, ttl any) *MockAPIKeyService_ReissueAPIKey_Call {
+	return &MockAPIKeyService_ReissueAPIKey_Call{Call: _e.mock.On("ReissueAPIKey", ctx, userID, keyID, ttl)}
+}
+
+func (_c *MockAPIKeyService_ReissueAPIKey_Call) Run(run func(ctx context.Context, userID uint, keyID uint, ttl time.Duration)) *MockAPIKeyService_ReissueAPIKey_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 uint
+		if args[2] != nil {
+			arg2 = args[2].(uint)
+		}
+		var arg3 time.Duration
+		if args[3] != nil {
+			arg3 = args[3].(time.Duration)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_ReissueAPIKey_Call) Return(issuedAPIKey *IssuedAPIKey, err error) *MockAPIKeyService_ReissueAPIKey_Call {
+	_c.Call.Return(issuedAPIKey, err)
+	return _c
+}
+
+func (_c *MockAPIKeyService_ReissueAPIKey_Call) RunAndReturn(run func(ctx context.Context, userID uint, keyID uint, ttl time.Duration) (*IssuedAPIKey, error)) *MockAPIKeyService_ReissueAPIKey_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RevokeAPIKey provides a mock function for the type MockAPIKeyService
+func (_mock *MockAPIKeyService) RevokeAPIKey(ctx context.Context, userID uint, keyID uint) error {
+	ret := _mock.Called(ctx, userID, keyID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RevokeAPIKey")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint) error); ok {
+		r0 = returnFunc(ctx, userID, keyID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockAPIKeyService_RevokeAPIKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RevokeAPIKey'
+type MockAPIKeyService_RevokeAPIKey_Call struct {
+	*mock.Call
+}
+
+// RevokeAPIKey is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - keyID uint
+func (_e *MockAPIKeyService_Expecter) RevokeAPIKey(ctx any, userID any, keyID any) *MockAPIKeyService_RevokeAPIKey_Call {
+	return &MockAPIKeyService_RevokeAPIKey_Call{Call: _e.mock.On("RevokeAPIKey", ctx, userID, keyID)}
+}
+
+func (_c *MockAPIKeyService_RevokeAPIKey_Call) Run(run func(ctx context.Context, userID uint, keyID uint)) *MockAPIKeyService_RevokeAPIKey_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 uint
+		if args[2] != nil {
+			arg2 = args[2].(uint)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAPIKeyService_RevokeAPIKey_Call) Return(err error) *MockAPIKeyService_RevokeAPIKey_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockAPIKeyService_RevokeAPIKey_Call) RunAndReturn(run func(ctx context.Context, userID uint, keyID uint) error) *MockAPIKeyService_RevokeAPIKey_Call {
 	_c.Call.Return(run)
 	return _c
 }

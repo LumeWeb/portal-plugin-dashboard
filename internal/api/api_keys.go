@@ -12,13 +12,12 @@ import (
 	"github.com/labstack/echo/v4"
 	swagger "go.lumeweb.com/gswagger"
 	"go.lumeweb.com/httputil"
-	"go.lumeweb.com/portal-middleware/auth/adapter"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
-	"go.lumeweb.com/portal-plugin-dashboard/internal/service/api_key"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db/types"
 	"go.lumeweb.com/queryutil"
 	queryutilHttp "go.lumeweb.com/queryutil/http"
 	"gorm.io/gorm"
@@ -90,13 +89,9 @@ func (a *API) createAPIKey(c echo.Context) error {
 		return nil // Error handled by DecodeAndValidateRequest
 	}
 
-	// Get config provider from core context
-	configProvider := adapter.NewFromCore(a.Context())
-	privateKey := configProvider.GetPrivateKey()
-	domain := configProvider.GetDomain()
-
-	// Create API key record
-	apiKey, err := a.apiKey.CreateAPIKey(ctx.Request().Context(), user, requestDto.Name)
+	// Issue the API key row and sign its JWT in one step. The service holds the
+	// signing key, so the handler no longer needs the config provider here.
+	issued, err := a.apiKey.IssueAPIKey(ctx.Request().Context(), user, requestDto.Name, time.Hour*24*30)
 	if err != nil {
 		if core.IsAccountError(err) {
 			acctErr := core.AsAccountError(err)
@@ -105,26 +100,16 @@ func (a *API) createAPIKey(c echo.Context) error {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	// Generate JWT for the API key
-	apiKeyJWT, err := jwt.CreateToken(
-		privateKey,
-		domain,
-		fmt.Sprintf("%d", user),
-		api_key.PurposeAPI,
-		time.Hour*24*30, // 30 day expiry
-		jwt.WithClaims(&jwt.RegisteredClaims{
-			ID: apiKey.UUID.String(),
-		}),
-	)
-	if err != nil {
-		if core.IsAccountError(err) {
-			acctErr := core.AsAccountError(err)
-			return ctx.Error(acctErr, acctErr.HttpStatus())
-		}
-		return ctx.Error(err, http.StatusInternalServerError)
+	// Reconstruct the model view for the DTO response. The token is the issued
+	// JWT; the row ID/expiry/UUID/name come from the issued result.
+	apiKey := &pluginDb.APIKey{
+		Model:   gorm.Model{ID: issued.ID},
+		UUID:    types.FromUUID(issued.UUID),
+		UserID:  user,
+		Name:    issued.Name,
+		JWT:     issued.Token,
+		Expires: &issued.ExpiresAt,
 	}
-
-	apiKey.JWT = apiKeyJWT
 
 	var responseDto dto.CreateAPIKeyResponse
 	return httputil.EncodeResponse(ctx, apiKey, &responseDto)

@@ -46,11 +46,15 @@ func TestCreateAPIKey_Success(t *testing.T) {
 			Name: "test-key",
 			JWT:  "generated-jwt-token",
 		}
-		apiKeySvc.EXPECT().CreateAPIKey(mock.Anything, uint(1), "test-key").
-			Return(&pluginDb.APIKey{
-				UUID: mockAPIKey.UUID,
-				Name: "test-key",
-				JWT:  "generated-jwt-token",
+		// createAPIKey now routes through the service issuance method, which
+		// signs the JWT and returns the one-time IssuedAPIKey result.
+		apiKeySvc.EXPECT().IssueAPIKey(mock.Anything, uint(1), "test-key", mock.Anything).
+			Return(&pluginCore.IssuedAPIKey{
+				ID:        uint(1),
+				Token:     "generated-jwt-token",
+				ExpiresAt: time.Now().Add(time.Hour * 24 * 30),
+				UUID:      mockAPIKey.UUID.ToUUID(),
+				Name:      "test-key",
 			}, nil).Once()
 
 		// Create valid JWT token using the context's identity
