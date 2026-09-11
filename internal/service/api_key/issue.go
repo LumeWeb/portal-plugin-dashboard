@@ -42,34 +42,50 @@ func (s *APIKeyServiceDefault) signAPIKeyJWT(key *pluginDb.APIKey, ttl time.Dura
 }
 
 // IssueAPIKey creates a new API key for the user, signs it, and returns the
-// one-time token. The token is never persisted; only the row ID and expiry are
-// stored. Keep the returned token only long enough to hand it to the runtime
-// environment configured for the workspace.
+// one-time token. The APIKey row is created and its expiry is persisted in the
+// same transaction so a failure after the row is created cannot leave an
+// orphaned row with a NULL Expires behind. The token is never persisted; only
+// the row ID and expiry are stored. Keep the returned token only long enough
+// to hand it to the runtime environment configured for the workspace.
 func (s *APIKeyServiceDefault) IssueAPIKey(ctx context.Context, userID uint, name string, ttl time.Duration) (*pluginCore.IssuedAPIKey, error) {
 	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.IssueAPIKey")
 	defer span.End()
 
-	key, err := s.CreateAPIKey(ctx, userID, name)
-	if err != nil {
-		return nil, err
-	}
+	var issued *pluginCore.IssuedAPIKey
 
-	token, expiresAt, err := s.signAPIKeyJWT(key, ttl)
-	if err != nil {
-		s.Logger().Error("failed to sign issued api key", zap.Error(err))
-		return nil, err
-	}
+	err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+		apiKey := &pluginDb.APIKey{
+			Name:   name,
+			UserID: userID,
+		}
+		if errTx := tx.Create(apiKey).Error; errTx != nil {
+			return tx
+		}
 
-	err = db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-		return tx.Model(&pluginDb.APIKey{}).Where("id = ?", key.ID).Update("expires", expiresAt)
+		token, expiresAt, errTx := s.signAPIKeyJWT(apiKey, ttl)
+		if errTx != nil {
+			_ = tx.AddError(errTx)
+			return tx
+		}
+
+		// Persist the expiry in the same transaction as the row creation. If
+		// this write fails the whole transaction rolls back, so no API-key row
+		// is left behind.
+		if errTx := tx.Model(&pluginDb.APIKey{}).Where("id = ?", apiKey.ID).Update("expires", expiresAt).Error; errTx != nil {
+			_ = tx.AddError(errTx)
+			return tx
+		}
+
+		apiKey.Expires = &expiresAt
+		issued = &pluginCore.IssuedAPIKey{ID: apiKey.ID, Token: token, ExpiresAt: expiresAt, UUID: apiKey.UUID.ToUUID(), Name: apiKey.Name}
+		return tx
 	})
 	if err != nil {
-		s.Logger().Error("failed to set api key expiry", zap.Error(err))
-		return nil, fmt.Errorf("failed to set api key expiry: %w", err)
+		s.Logger().Error("failed to issue api key", zap.Error(err))
+		return nil, fmt.Errorf("failed to issue api key: %w", err)
 	}
-	key.Expires = &expiresAt
 
-	return &pluginCore.IssuedAPIKey{ID: key.ID, Token: token, ExpiresAt: expiresAt, UUID: key.UUID.ToUUID(), Name: key.Name}, nil
+	return issued, nil
 }
 
 // ReissueAPIKey refreshes the JWT for an existing API key owned by the user,

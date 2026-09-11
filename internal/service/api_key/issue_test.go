@@ -2,6 +2,7 @@ package api_key
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -43,6 +44,41 @@ func TestAPIKeyService_IssueAPIKey(t *testing.T) {
 
 		// The token is a signed JWT, not the persisted row's raw JWT field.
 		assert.NotEqual(tb, issued.Token, fetched.JWT)
+	})
+}
+
+// TestAPIKeyService_IssueAPIKey_ExpiryWriteFailureRollsBack verifies that
+// creating the API key row and persisting its expiry are atomic. It forces the
+// expiry write to fail inside IssueAPIKey's transaction and asserts that the
+// just-created row is rolled back rather than left behind as an orphan with a
+// NULL Expires.
+func TestAPIKeyService_IssueAPIKey_ExpiryWriteFailureRollsBack(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		svc := core.GetService[*APIKeyServiceDefault](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, svc)
+
+		// Make the expiry Update step inside IssueAPIKey's transaction fail.
+		// Register the hook on the service's own DB instance so it applies to
+		// the transaction the service opens internally.
+		failExpiry := errors.New("forced expiry write failure")
+		err := svc.DB().Callback().Update().Before("gorm:update").
+			Register("force_api_key_expiry_failure", func(db *gorm.DB) {
+				if db.Statement.Table == "api_keys" {
+					_ = db.AddError(failExpiry)
+				}
+			})
+		require.NoError(tb, err)
+		tb.Cleanup(func() {
+			_ = svc.DB().Callback().Update().Remove("force_api_key_expiry_failure")
+		})
+
+		_, issueErr := svc.IssueAPIKey(context.Background(), uint(1), "workspace-1", time.Hour)
+		require.Error(tb, issueErr)
+
+		var count int64
+		err = ctx.DB().Model(&pluginDb.APIKey{}).Count(&count).Error
+		require.NoError(tb, err)
+		assert.Zero(tb, count, "no API-key row should remain when the expiry write fails")
 	})
 }
 
