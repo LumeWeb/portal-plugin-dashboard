@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
@@ -79,6 +80,94 @@ func TestAPIKeyService_IssueAPIKey_ExpiryWriteFailureRollsBack(t *testing.T) {
 		err = ctx.DB().Model(&pluginDb.APIKey{}).Count(&count).Error
 		require.NoError(tb, err)
 		assert.Zero(tb, count, "no API-key row should remain when the expiry write fails")
+	})
+}
+
+// counterValue registers the given counter in a fresh registry and returns its
+// current value. Used to read package-level metric counters that are not bound
+// to a shared registry.
+func counterValue(tb coreTesting.TB, c prometheus.Collector) float64 {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(c)
+	mfs, err := reg.Gather()
+	require.NoError(tb, err)
+	if len(mfs) == 0 || len(mfs[0].GetMetric()) == 0 {
+		return 0
+	}
+	return mfs[0].GetMetric()[0].GetCounter().GetValue()
+}
+
+// histogramSampleCount registers the given histogram child in a fresh registry
+// and returns how many samples it has collected. Used to assert that the issue
+// path records duration on the create operation.
+func histogramSampleCount(tb coreTesting.TB, observer prometheus.Observer) uint64 {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(observer.(prometheus.Collector))
+	mfs, err := reg.Gather()
+	require.NoError(tb, err)
+	if len(mfs) == 0 || len(mfs[0].GetMetric()) == 0 {
+		return 0
+	}
+	return mfs[0].GetMetric()[0].GetHistogram().GetSampleCount()
+}
+
+// TestAPIKeyService_IssueAPIKey_CreatePathMetrics verifies that the issue path
+// emits the same create-path metrics as CreateAPIKey: it increments the created
+// total and records duration on the create operation. Because the metrics are
+// package-level and accumulate, each assertion compares against a baseline read
+// immediately before the call.
+func TestAPIKeyService_IssueAPIKey_CreatePathMetrics(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		svc := core.GetService[*APIKeyServiceDefault](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, svc)
+
+		createdBefore := counterValue(tb, CreatedTotal.WithLabelValues())
+		durationBefore := histogramSampleCount(tb, Duration.WithLabelValues(LabelOpCreate))
+
+		issued, err := svc.IssueAPIKey(context.Background(), uint(1), "metrics-workspace", time.Hour)
+		require.NoError(tb, err)
+		require.NotNil(tb, issued)
+
+		createdAfter := counterValue(tb, CreatedTotal.WithLabelValues())
+		assert.Equal(tb, createdBefore+1, createdAfter, "IssueAPIKey should count the created key")
+
+		durationAfter := histogramSampleCount(tb, Duration.WithLabelValues(LabelOpCreate))
+		assert.Greater(tb, durationAfter, durationBefore, "IssueAPIKey should record duration on the create operation")
+	})
+}
+
+// TestAPIKeyService_IssueAPIKey_ErrorPathTracksErrors verifies that when the
+// issue path fails, it increments the create error counter and does not count a
+// created key.
+func TestAPIKeyService_IssueAPIKey_ErrorPathTracksErrors(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		svc := core.GetService[*APIKeyServiceDefault](ctx, pluginCore.API_KEY_SERVICE)
+		require.NotNil(tb, svc)
+
+		errorsBefore := counterValue(tb, Errors.WithLabelValues(LabelOpCreate))
+		createdBefore := counterValue(tb, CreatedTotal.WithLabelValues())
+
+		// Force the expiry Update step inside IssueAPIKey's transaction to fail.
+		failExpiry := errors.New("forced expiry write failure")
+		err := svc.DB().Callback().Update().Before("gorm:update").
+			Register("force_api_key_expiry_failure_metrics", func(db *gorm.DB) {
+				if db.Statement.Table == "api_keys" {
+					_ = db.AddError(failExpiry)
+				}
+			})
+		require.NoError(tb, err)
+		tb.Cleanup(func() {
+			_ = svc.DB().Callback().Update().Remove("force_api_key_expiry_failure_metrics")
+		})
+
+		_, issueErr := svc.IssueAPIKey(context.Background(), uint(1), "metrics-workspace", time.Hour)
+		require.Error(tb, issueErr)
+
+		errorsAfter := counterValue(tb, Errors.WithLabelValues(LabelOpCreate))
+		assert.Greater(tb, errorsAfter, errorsBefore, "IssueAPIKey error path should increment the create error counter")
+
+		createdAfter := counterValue(tb, CreatedTotal.WithLabelValues())
+		assert.Equal(tb, createdBefore, createdAfter, "IssueAPIKey error path must not count a created key")
 	})
 }
 
