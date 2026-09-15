@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -77,6 +78,31 @@ func TestAdminNotify_WalletRegistrationIncludesAddress(t *testing.T) {
 		).Return(nil).Once()
 
 		api.notifyAdminNewUser(context.Background(), user)
+
+		userSvc.AssertExpectations(tb)
+		mailer.AssertExpectations(tb)
+	}, coreTesting.WithConfig("core.mail.admin_email", testAdminEmail))
+}
+
+// If the key identity lookup fails we cannot tell whether this is a wallet
+// registration, so the notification is skipped: the (potentially synthetic
+// anonymous) user email must never be exposed to the admin.
+func TestAdminNotify_KeyIdentityLookupErrorSkips(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api := core.GetAPI(internal.PLUGIN_NAME).(*API)
+		userSvc := coreTesting.GetMockUserService(ctx)
+		mailer := coreTesting.GetMockMailerService(ctx)
+
+		// Created user whose email would be the synthetic anon value if leaked.
+		user := &models.User{Model: gorm.Model{ID: 7}, Email: "anon_0xabc123@local.invalid"}
+
+		userSvc.EXPECT().ListKeyIdentities(mock.Anything, uint(7), mock.Anything, mock.Anything, mock.Anything).
+			Return(nil, int64(0), errors.New("lookup failed")).Once()
+
+		api.notifyAdminNewUser(context.Background(), user)
+
+		// Failure must not send any email (no fallback to the anon email).
+		mailer.AssertNotCalled(tb, "TemplateSend")
 
 		userSvc.AssertExpectations(tb)
 		mailer.AssertExpectations(tb)

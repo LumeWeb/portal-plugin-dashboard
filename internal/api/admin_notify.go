@@ -47,8 +47,20 @@ func (a *API) notifyAdminNewUser(ctx context.Context, user *models.User) {
 	if user != nil {
 		// Determine whether this is a wallet registration by querying the key
 		// identities linked to the created user. The first linked key is used
-		// as the wallet address in the message.
-		if identities, _, err := a.user.ListKeyIdentities(ctx, user.ID, nil, nil, queryutil.DefaultPagination); err == nil && len(identities) > 0 {
+		// as the wallet address in the message. A failed lookup is logged and
+		// the notification is skipped entirely: we cannot distinguish a wallet
+		// registration from an email/social one, and falling through to the
+		// user's (synthetic anonymous) email would leak it to the admin.
+		identities, _, err := a.user.ListKeyIdentities(ctx, user.ID, nil, nil, queryutil.DefaultPagination)
+		if err != nil {
+			a.Logger().Warn("failed to list key identities for admin new-user notification; skipping",
+				zap.Error(err),
+				zap.Uint("user_id", user.ID),
+			)
+			return
+		}
+
+		if len(identities) > 0 {
 			bodyVars["WalletAddress"] = identities[0].Key
 			bodyVars["KeyType"] = identities[0].Type
 		} else {
