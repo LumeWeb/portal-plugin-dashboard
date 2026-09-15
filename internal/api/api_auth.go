@@ -209,5 +209,9 @@ func (a *API) register(c echo.Context) error {
 		return ctx.Error(acctErr, acctErr.HttpStatus())
 	}
 
+	// Notify the configured portal admin about the new email/password
+	// registration. No-op unless core.mail.admin_email is set.
+	a.notifyAdminNewUser(ctx.Request().Context(), user)
+
 	return c.NoContent(http.StatusOK)
 }

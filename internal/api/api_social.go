@@ -480,6 +480,14 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 		return a.socialErrorPage(ctx, providerName, err)
 	}
 
+	// Notify the configured portal admin about a new social registration, but
+	// only when an account was actually created (not when the identity was
+	// merely linked to an already-existing user). No-op unless
+	// core.mail.admin_email is set.
+	if result.Created {
+		a.notifyAdminNewUser(ctx.Request().Context(), result.User)
+	}
+
 	// If the provider did not confirm the email, the account is created
 	// unverified and must be verified before a session is established.
 	if !result.EmailVerified {

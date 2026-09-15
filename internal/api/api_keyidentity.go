@@ -303,6 +303,12 @@ func (a *API) registerAnonKeyIdentity(
 		return rollBack(wrapSocialError(err), "failed to link key identity to new anon account")
 	}
 
+	// Notify the configured portal admin about the new wallet registration.
+	// The key identity is linked above, so the wallet address is resolved from
+	// it (never from the synthetic anonymous email). No-op unless
+	// core.mail.admin_email is set.
+	a.notifyAdminNewUser(c.Request().Context(), user)
+
 	token, err := a.auth.LoginID(c.Request().Context(), user.ID, ctx.RealIP(), requestDto.Remember)
 	if err != nil {
 		// No rollback here: the key identity is already linked, so the wallet
