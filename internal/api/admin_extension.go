@@ -87,6 +87,7 @@ func (e *SocialAdminExtension) buildRoutes() []router.Route {
 			router.WithTags("social", "providers"),
 			router.WithSchema(providerSchema),
 			router.WithFilterParamsFromSchema(providerSchema),
+			router.WithPaginationParams(),
 			router.WithSuccessResponse(http.StatusOK, "List of providers",
 				router.WithJSONContent(dto.SocialProviderListResponse{}),
 				router.WithTotalCountHeader(),
