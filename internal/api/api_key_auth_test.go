@@ -36,7 +36,7 @@ func TestParseAPIKeyToken_VerifiesCredential(t *testing.T) {
 					signingKey = gjwt.UnsafeAllowNoneSignatureType
 				case "wrong algorithm":
 					method = gjwt.SigningMethodHS256
-					signingKey = []byte("not-a-portal-key")
+					signingKey = []byte(wrongKey)
 				case "wrong issuer":
 					claims.Issuer = "other.example"
 				case "missing issuer":
