@@ -80,6 +80,7 @@ func init() {
 func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []router.Route {
 	return []router.Route{
 		router.NewRoute(http.MethodGet, "/api/account/auth/providers", a.listPublicProviders,
+			router.WithAccess(""),
 			router.WithSwaggerOptions(
 				router.WithSummary("List available social login providers"),
 				router.WithDescription("Returns enabled social login providers for the login page. No authentication required."),
@@ -88,6 +89,7 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			),
 		),
 		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider", a.socialAuthLogin,
+			router.WithAccess(""),
 			router.WithSwaggerOptions(
 				router.WithSummary("Initiate Social Login"),
 				router.WithDescription("Redirects the user to the specified social login provider's authentication page."),
@@ -97,6 +99,7 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			),
 		),
 		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider/callback", a.socialAuthCallback,
+			router.WithAccess(""),
 			router.WithSwaggerOptions(
 				router.WithSummary("Social Login Callback"),
 				router.WithDescription("Callback endpoint for social login providers. Completes the authentication process."),
@@ -105,6 +108,7 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			),
 		),
 		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider/logout", a.socialAuthLogout,
+			router.WithAccess(""),
 			router.WithSwaggerOptions(
 				router.WithSummary("Social Logout"),
 				router.WithDescription("Logs out the user from the social login provider session."),
@@ -145,6 +149,7 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			router.WithMiddlewares(authMw, accessMw),
 		),
 		router.NewRoute(http.MethodGet, "/api/account/auth/sso/:provider/consent", a.socialConsentPage,
+			router.WithAccess(""),
 			router.WithSwaggerOptions(
 				router.WithSummary("Show social link consent page"),
 				router.WithDescription("Renders the consent page when a verified social login email matches an existing account. The page asks the user to approve linking the provider identity to that account before any link is created."),
@@ -153,6 +158,7 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 			),
 		),
 		router.NewRoute(http.MethodPost, "/api/account/auth/sso/:provider/consent", a.socialConsentSubmit,
+			router.WithAccess(""),
 			router.WithSwaggerOptions(
 				router.WithSummary("Approve or reject social link consent"),
 				router.WithDescription("Approves or rejects linking the pending provider identity to the existing account. Called by the consent page. Returns the redirect URI to navigate to."),
@@ -170,7 +176,7 @@ func (a *API) buildSocialAuthRoutes(authMw, accessMw echo.MiddlewareFunc) []rout
 func (a *API) setupSocialAuthRoutes(gRouter router.Router, authMw, accessMw echo.MiddlewareFunc) error {
 	socialAuthRoutes := a.buildSocialAuthRoutes(authMw, accessMw)
 
-	if err := router.RegisterRoutes(gRouter, nil, a.Subdomain(), socialAuthRoutes); err != nil {
+	if err := router.RegisterRoutes(gRouter, a.access, a.Subdomain(), socialAuthRoutes); err != nil {
 		return fmt.Errorf("failed to register social auth routes: %w", err)
 	}
 
