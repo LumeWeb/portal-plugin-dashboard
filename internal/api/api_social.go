@@ -23,7 +23,6 @@ import (
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/queryutil"
-	queryutilHttp "go.lumeweb.com/queryutil/http"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
@@ -346,10 +345,8 @@ func (a *API) listSocialLinks(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	return queryutilHttp.ProcessListRequest(
-		c.Response(),
-		c.Request(),
-		"social_accounts",
+	return processListQuery(
+		c.Response(), c.Request(), "social_accounts", dto.SocialAccounts().Normalize,
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.SocialAccount, int64, error) {
 			return a.socialAuth.ListAccounts(ctx.Request().Context(), userId, filters, sorts, pagination)
 		},
@@ -360,7 +357,7 @@ func (a *API) listSocialLinks(c echo.Context) error {
 				Email:          acct.Email,
 				CreatedAt:      acct.CreatedAt,
 			}
-		},
+		}, "provider", "provider_user_id", "email",
 	)
 }
 

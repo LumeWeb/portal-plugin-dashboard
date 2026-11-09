@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -20,6 +21,31 @@ import (
 	"go.lumeweb.com/portal/db/models"
 	"gorm.io/gorm"
 )
+
+func TestListOperationsRejectsUnsafeAndMalformedFilters(t *testing.T) {
+	for _, query := range []url.Values{
+		{"filters[user_id][eq]": {"2"}},
+		{"_sort": {"user_id"}},
+		{"filters[cid][eq]": {"not-a-cid"}},
+	} {
+		t.Run(query.Encode(), func(t *testing.T) {
+			coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+				userSvc := coreTesting.GetMockUserService(ctx)
+				workflowSvc := core.GetService[*coreTesting.MockWorkflowService](ctx, core.WORKFLOW_SERVICE)
+				userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, &models.User{Model: gorm.Model{ID: 1}}, nil).Once()
+				token := CreateTestLoginToken(tb, ctx, "1")
+				domain := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE).APISubdomain(internal.PLUGIN_NAME, false)
+				req := httptest.NewRequest(http.MethodGet, "/api/operations?"+query.Encode(), nil)
+				req.Host = domain
+				req.Header.Set("Authorization", "Bearer "+token)
+				w := httptest.NewRecorder()
+				ctx.Router().ServeHTTP(w, req)
+				require.Equal(tb, http.StatusBadRequest, w.Code, w.Body.String())
+				workflowSvc.AssertNotCalled(tb, "ListWorkflowInstances", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			})
+		})
+	}
+}
 
 func TestListOperations_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
@@ -179,7 +205,7 @@ func TestGetOperationFilters_Success(t *testing.T) {
 
 		// Mock expectations
 		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.EXPECT().ListDistinctWorkflowFilters( mock.Anything, uint(1), mock.Anything).
+		workflowSvc.EXPECT().ListDistinctWorkflowFilters(mock.Anything, uint(1), mock.Anything).
 			Return(mockFilters, nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -267,7 +293,7 @@ func TestGetOperationFilters_EmptyResult(t *testing.T) {
 
 		// Mock expectations - empty filters map
 		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.EXPECT().ListDistinctWorkflowFilters( mock.Anything, uint(1), mock.Anything).
+		workflowSvc.EXPECT().ListDistinctWorkflowFilters(mock.Anything, uint(1), mock.Anything).
 			Return(map[string][]string{}, nil).Once()
 
 		// Create valid JWT token using the context's identity
@@ -337,7 +363,7 @@ func TestGetOperationFilters_Failure_WorkflowServiceError(t *testing.T) {
 
 		// Mock expectations - return error
 		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.EXPECT().ListDistinctWorkflowFilters( mock.Anything, uint(1), mock.Anything).
+		workflowSvc.EXPECT().ListDistinctWorkflowFilters(mock.Anything, uint(1), mock.Anything).
 			Return(nil, assert.AnError).Once()
 
 		// Create valid JWT token using the context's identity
@@ -503,7 +529,7 @@ func TestGetOperation_Failure_NotFound(t *testing.T) {
 
 		// Mock expectations
 		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, mockUser, nil).Once()
-		workflowSvc.EXPECT().GetWorkflowInstance( mock.Anything, uint(1), uint(1)).
+		workflowSvc.EXPECT().GetWorkflowInstance(mock.Anything, uint(1), uint(1)).
 			Return(nil, gorm.ErrRecordNotFound).Once()
 
 		// Create valid JWT token using the context's identity

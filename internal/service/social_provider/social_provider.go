@@ -7,6 +7,7 @@ import (
 	"context"
 
 	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/db"
@@ -29,6 +30,10 @@ func (s *SocialProviderServiceDefault) ID() string {
 }
 
 func (s *SocialProviderServiceDefault) List(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.SocialProviderConfig, int64, error) {
+	filters, err := dto.SocialProviders().Normalize(filters, sorts)
+	if err != nil {
+		return nil, 0, err
+	}
 	query := s.DB().WithContext(ctx).Model(&pluginDb.SocialProviderConfig{})
 	query = queryutil.ApplyFilters(query, filters, nil)
 	query = queryutil.ApplySort(query, sorts)

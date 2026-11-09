@@ -12,6 +12,8 @@ import (
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/portal/db"
+	"go.lumeweb.com/queryutil"
+	"go.lumeweb.com/queryutil/filter"
 )
 
 func TestMain(m *testing.M) {
@@ -67,6 +69,28 @@ func TestSocialProviderService_CreateDuplicateKey(t *testing.T) {
 		err := svc.Create(context.Background(), mk())
 		require.Error(tb, err)
 		assert.True(tb, db.IsDuplicateKeyError(err), "expected duplicate-key error, got %v", err)
+	})
+}
+
+func TestSocialProviderService_ListRejectsSecretAndSortExpressions(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		svc := core.GetService[pluginCore.SocialProviderService](ctx, pluginCore.SOCIAL_PROVIDER_SERVICE)
+		require.NoError(tb, svc.Create(context.Background(), &pluginDb.SocialProviderConfig{ProviderID: "google", DisplayName: "Google", ClientID: "id", ClientSecret: "secret"}))
+		for _, filters := range [][]queryutil.CrudFilter{
+			{queryutil.NewLogicalFilter("client_secret", filter.OpEq, "secret")},
+			{queryutil.NewConditionalFilter(filter.LogicalOr, []queryutil.CrudFilter{queryutil.NewLogicalFilter("client_secret", filter.OpEq, "secret")})},
+		} {
+			rows, total, err := svc.List(context.Background(), filters, nil, queryutil.DefaultPagination)
+			require.ErrorIs(tb, err, filter.ErrInvalidQuery)
+			require.Empty(tb, rows)
+			require.Zero(tb, total)
+		}
+		_, _, err := svc.List(context.Background(), nil, []queryutil.Sort{{Field: "id; DROP TABLE social_provider_configs", Order: filter.OrderAsc}}, queryutil.DefaultPagination)
+		require.ErrorIs(tb, err, filter.ErrInvalidQuery)
+		rows, total, err := svc.List(context.Background(), []queryutil.CrudFilter{queryutil.NewLogicalFilter("display_name", filter.OpEq, "Google")}, nil, queryutil.DefaultPagination)
+		require.NoError(tb, err)
+		require.EqualValues(tb, 1, total)
+		require.Len(tb, rows, 1)
 	})
 }
 

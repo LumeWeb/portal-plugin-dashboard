@@ -191,10 +191,8 @@ func (a *API) listOperations(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	return queryutilHttp.ProcessListRequest(
-		c.Response(),
-		c.Request(),
-		"operations",
+	return processListQuery(
+		c.Response(), c.Request(), "operations", dto.Operations().Normalize,
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*dto.OperationListItem, int64, error) {
 			dbFilters, err := mapOperationFilters(filters)
 			if err != nil {
@@ -234,7 +232,7 @@ func (a *API) listOperations(c echo.Context) error {
 		},
 		func(item *dto.OperationListItem) dto.OperationListItem {
 			return *item
-		},
+		}, "operation", "protocol", "status", "status_message", "cid",
 	)
 }
 

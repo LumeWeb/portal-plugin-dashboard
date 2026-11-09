@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/portal/db/types"
+	"go.lumeweb.com/queryutil"
+	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/gorm"
 )
 
@@ -172,6 +175,54 @@ func TestCreateAPIKey_Failure_InvalidInput(t *testing.T) {
 
 		// Verify mock expectations
 		userSvc.AssertExpectations(tb)
+	})
+}
+
+func TestGetAPIKeysRejectsUnsafeQueriesBeforeServiceCall(t *testing.T) {
+	for _, query := range []url.Values{
+		{"filters[user_id][eq]": {"2"}},
+		{"filters[or][0][name][eq]": {"a"}, "filters[or][1][user_id][eq]": {"2"}},
+		{"_sort": {"(SELECT 1)"}},
+	} {
+		t.Run(query.Encode(), func(t *testing.T) {
+			coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+				userSvc := coreTesting.GetMockUserService(ctx)
+				apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+				userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, &models.User{Model: gorm.Model{ID: 1}}, nil).Once()
+				token := CreateTestLoginToken(tb, ctx, "1")
+				domain := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE).APISubdomain(internal.PLUGIN_NAME, false)
+				req := httptest.NewRequest(http.MethodGet, "/api/account/keys?"+query.Encode(), nil)
+				req.Host = domain
+				req.Header.Set("Authorization", "Bearer "+token)
+				w := httptest.NewRecorder()
+				ctx.Router().ServeHTTP(w, req)
+				require.Equal(tb, http.StatusBadRequest, w.Code, w.Body.String())
+				apiKeySvc.AssertNotCalled(tb, "GetAPIKeys", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			})
+		})
+	}
+}
+
+func TestGetAPIKeysPreservesNumericOnlySearch(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		userSvc := coreTesting.GetMockUserService(ctx)
+		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, &models.User{Model: gorm.Model{ID: 1}}, nil).Once()
+		apiKeySvc.EXPECT().GetAPIKeys(mock.Anything, uint(1), mock.MatchedBy(func(filters []queryutil.CrudFilter) bool {
+			if len(filters) != 1 {
+				return false
+			}
+			node, ok := filters[0].(*filter.LogicalFilter)
+			return ok && node.Field() == "q" && node.Operator() == filter.OpContains && node.Value() == "12345"
+		}), mock.Anything, mock.Anything).Return([]*pluginDb.APIKey{}, int64(0), nil).Once()
+		token := CreateTestLoginToken(tb, ctx, "1")
+		domain := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE).APISubdomain(internal.PLUGIN_NAME, false)
+		req := httptest.NewRequest(http.MethodGet, "/api/account/keys?filters%5Bq%5D%5Beq%5D=12345", nil)
+		req.Host = domain
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		ctx.Router().ServeHTTP(w, req)
+		require.Equal(tb, http.StatusOK, w.Code, w.Body.String())
 	})
 }
 

@@ -329,6 +329,19 @@ func TestCompleteSocialLink_AlreadyLinked(t *testing.T) {
 	}, socialTestOptions)
 }
 
+func TestListSocialLinksRejectsTenantFilterBeforePortalService(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, socialSvc := socialTestAPI(ctx)
+		req := httptest.NewRequest(http.MethodGet, "/api/account/auth/links?filters%5Buser_id%5D%5Beq%5D=2", nil)
+		w := httptest.NewRecorder()
+		c := echo.New().NewContext(req, w)
+		c.Set(string(mcontext.UserIDKey), uint(5))
+		require.Error(tb, api.listSocialLinks(c))
+		require.Equal(tb, http.StatusBadRequest, w.Code)
+		socialSvc.AssertNotCalled(tb, "ListAccounts", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	}, socialTestOptions)
+}
+
 func TestListSocialLinks(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		api, socialSvc := socialTestAPI(ctx)
