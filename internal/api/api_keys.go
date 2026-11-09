@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	gjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	jsonschema "github.com/invopop/jsonschema"
 	"github.com/labstack/echo/v4"
@@ -172,19 +173,18 @@ func (a *API) parseAPIKeyToken(ctx httputil.RequestContext) (userID uint, keyID 
 		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, err)
 	}
 
-	// Decode the token
-	decodedToken, err := jwt.DecodeToken(token, &jwt.RegisteredClaims{})
+	claims := &jwt.RegisteredClaims{}
+	cfg := a.Config().Config().Core
+	_, err = gjwt.ParseWithClaims(token, claims, func(_ *gjwt.Token) (any, error) {
+		return cfg.Identity.PublicKey(), nil
+	}, gjwt.WithValidMethods([]string{gjwt.SigningMethodEdDSA.Alg()}),
+		gjwt.WithIssuer(cfg.Domain), gjwt.WithAudience(string(jwt.PurposeAPI)), gjwt.WithExpirationRequired())
 	if err != nil {
 		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, err)
 	}
 
-	claims, ok := decodedToken.(*jwt.RegisteredClaims)
-	if !ok {
-		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, errors.New("invalid token claims"))
-	}
-
 	// Extract user ID from the subject claim
-	parsedUserID, err := strconv.ParseUint(claims.Subject, 10, 64)
+	parsedUserID, err := strconv.ParseUint(claims.Subject, 10, strconv.IntSize)
 	if err != nil {
 		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, err)
 	}
@@ -195,7 +195,7 @@ func (a *API) parseAPIKeyToken(ctx httputil.RequestContext) (userID uint, keyID 
 
 	// Extract key ID from the token ID claim
 	parsedKeyID, err := uuid.Parse(claims.ID)
-	if err != nil {
+	if err != nil || parsedKeyID == uuid.Nil {
 		return 0, uuid.Nil, core.NewAccountError(core.ErrKeyInvalidLogin, errors.New("invalid key ID in token"))
 	}
 

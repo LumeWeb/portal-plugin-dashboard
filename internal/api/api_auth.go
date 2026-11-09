@@ -81,7 +81,7 @@ func (a *API) buildAuthRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.Mi
 			router.WithSwaggerOptions(
 				router.WithSummary("Authenticate with API Key"),
 				router.WithDescription("Exchanges an API key for a JWT."),
-				router.WithHeaderParam("Authorization", "API Key followed by the key", "APIKey <your_key>"),
+				router.WithHeaderParam("Authorization", "Bearer followed by the signed API key", "Bearer <your_key>"),
 				router.WithSuccessResponse(http.StatusOK, "JWT issued",
 					router.WithJSONContent(dto.LoginResponse{}),
 				),
