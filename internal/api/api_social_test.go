@@ -405,7 +405,7 @@ func TestSocialAuthCallback_LoginFlow(t *testing.T) {
 		// Write a login-mode session cookie.
 		key, err := api.socialSessionKey()
 		require.NoError(tb, err)
-		session := &provider.SocialAuthSession{State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/dashboard"}
+		session := &provider.SocialAuthSession{ProviderName: "google", State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/dashboard"}
 		cookW := httptest.NewRecorder()
 		require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
 		cookies := cookW.Result().Cookies()
@@ -454,7 +454,7 @@ func TestSocialAuthCallback_LinkFlow(t *testing.T) {
 		// Write a link-mode session cookie.
 		key, err := api.socialSessionKey()
 		require.NoError(tb, err)
-		session := &provider.SocialAuthSession{State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/settings", Mode: provider.SessionModeLink, UserID: 9}
+		session := &provider.SocialAuthSession{ProviderName: "google", State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/settings", Mode: provider.SessionModeLink, UserID: 9}
 		cookW := httptest.NewRecorder()
 		require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
 		cookies := cookW.Result().Cookies()
@@ -485,7 +485,7 @@ func TestSocialAuthCallback_StateMismatchRendersErrorScreen(t *testing.T) {
 
 		key, err := api.socialSessionKey()
 		require.NoError(tb, err)
-		session := &provider.SocialAuthSession{State: "state-correct", CodeVerifier: "verifier-xyz", ReturnURL: "/"}
+		session := &provider.SocialAuthSession{ProviderName: "google", State: "state-correct", CodeVerifier: "verifier-xyz", ReturnURL: "/"}
 		cookW := httptest.NewRecorder()
 		require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
 		cookies := cookW.Result().Cookies()
@@ -675,6 +675,36 @@ func TestSocialConsentSubmit_Approve(t *testing.T) {
 			var resp dto.SocialConsentResponse
 			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
 			require.Contains(tb, resp.RedirectURI, "/api/auth/complete")
+		})
+	}, socialTestOptions)
+}
+
+// Rejecting the consent clears the pending session and sends the user home.
+func TestSocialConsentSubmit_OTPApprovalRequiresChallenge(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, social := socialTestAPI(ctx)
+		user := &models.User{Model: gorm.Model{ID: 12}, Email: "taken@example.com", OTPEnabled: true}
+		coreTesting.GetMockUserService(ctx).EXPECT().EmailExists(mock.Anything, user.Email).Return(true, user, nil).Once()
+		coreTesting.GetMockUserService(ctx).EXPECT().IsAccountPendingDeletion(mock.Anything, user.ID).Return(false, nil).Once()
+		social.EXPECT().LinkAccount(mock.Anything, user.ID, "google", "uid-3", user.Email).Return(nil).Once()
+		auth := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		consentSession(tb, api, provider.SocialAuthSession{Mode: provider.SessionModeConsentLink, ReturnURL: "/dashboard", ProviderName: "google", ProviderUserID: "uid-3", Email: user.Email}, func(cookies []*http.Cookie) {
+			req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", strings.NewReader(`{"approve":true}`))
+			req.Header.Set("Content-Type", "application/json")
+			for _, cookie := range cookies {
+				req.AddCookie(cookie)
+			}
+			w := httptest.NewRecorder()
+			c := echo.New().NewContext(req, w)
+			c.SetParamNames("provider")
+			c.SetParamValues("google")
+			require.NoError(tb, api.socialConsentSubmit(c))
+			require.Equal(tb, http.StatusOK, w.Code)
+			var response dto.SocialConsentResponse
+			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &response))
+			require.Equal(tb, "/otp?to=%2Fdashboard", response.RedirectURI)
+			require.NotEmpty(tb, w.Result().Cookies())
+			auth.AssertNotCalled(tb, "LoginID")
 		})
 	}, socialTestOptions)
 }

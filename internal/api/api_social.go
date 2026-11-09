@@ -235,6 +235,8 @@ func (a *API) socialAuthLogin(c echo.Context) error {
 		State:        state,
 		CodeVerifier: codeVerifier,
 		ReturnURL:    returnUrl,
+		ProviderName: providerName,
+		Mode:         provider.SessionModeLogin,
 	}
 
 	if err := provider.SaveSession(c.Response(), session, key, a.cookieSetter(), a.Config().Config().Core.Domain); err != nil {
@@ -273,7 +275,9 @@ func (a *API) socialAuthCallback(c echo.Context) error {
 	// The session is single-use; clear it regardless of the outcome below.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
 
-	if req.State == "" || req.State != session.State {
+	if session.ProviderName != providerName ||
+		(session.Mode != "" && session.Mode != provider.SessionModeLogin && session.Mode != provider.SessionModeLink) ||
+		req.State == "" || req.State != session.State {
 		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyInvalidState, nil))
 	}
 
@@ -398,6 +402,7 @@ func (a *API) socialAuthLink(c echo.Context) error {
 		CodeVerifier: codeVerifier,
 		ReturnURL:    returnUrl,
 		Mode:         provider.SessionModeLink,
+		ProviderName: providerName,
 		UserID:       userId,
 	}
 
@@ -498,7 +503,7 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 		return nil
 	}
 
-	return a.loginAndRedirect(ctx, providerName, result.User.ID, returnUrl)
+	return a.loginAndRedirect(ctx, providerName, result.User, returnUrl)
 }
 
 // promptLinkConsent handles a verified-email conflict during login by parking
@@ -616,7 +621,7 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 		return ctx.Error(err, http.StatusInternalServerError)
 	}
 
-	redirectURI, err := a.loginRedirectURI(ctx, existing.ID, session.ReturnURL)
+	redirectURI, err := a.loginRedirectURI(ctx, existing, session.ReturnURL)
 	if err != nil {
 		return a.socialError(ctx, err)
 	}
@@ -689,31 +694,6 @@ func sameOriginHost(expected, origin string) bool {
 		return d.Hostname() == o.Hostname()
 	}
 	return expected == o.Hostname()
-}
-
-// loginRedirectURI establishes a session for the user and returns the
-// auth-complete URL to navigate to. It does not write a response, so callers
-// can either redirect (browser navigation) or return the URL as JSON.
-func (a *API) loginRedirectURI(ctx httputil.RequestContext, userID uint, returnUrl string) (string, error) {
-	_jwt, err := a.auth.LoginID(ctx.Request().Context(), userID, ctx.RealIP(), false)
-	if err != nil {
-		return "", err
-	}
-
-	return a.buildAuthCompleteURL(_jwt, returnUrl), nil
-}
-
-// loginAndRedirect establishes a session for the user and redirects to the
-// auth-complete endpoint. Only reached from browser flows, so failures render
-// the sign-in error screen.
-func (a *API) loginAndRedirect(ctx httputil.RequestContext, providerName string, userID uint, returnUrl string) error {
-	redirectURL, err := a.loginRedirectURI(ctx, userID, returnUrl)
-	if err != nil {
-		return a.socialErrorPage(ctx, providerName, err)
-	}
-
-	http.Redirect(ctx.Response(), ctx.Request(), redirectURL, http.StatusFound)
-	return nil
 }
 
 // socialConsentPath is the consent page path for a provider, relative to the
