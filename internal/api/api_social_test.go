@@ -382,98 +382,106 @@ func TestSocialAuthUnlink(t *testing.T) {
 }
 
 func TestSocialAuthCallback_LoginFlow(t *testing.T) {
-	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		api, socialSvc := socialTestAPI(ctx)
-		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+	for _, sessionProvider := range []string{"google", ""} {
+		t.Run("provider="+sessionProvider, func(t *testing.T) {
+			coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+				api, socialSvc := socialTestAPI(ctx)
+				authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
 
-		userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"sub":"uid-1","email":"u@example.com","email_verified":true}`))
-		}))
-		defer userSrv.Close()
-		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
-		}))
-		defer tokenSrv.Close()
+				userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"sub":"uid-1","email":"u@example.com","email_verified":true}`))
+				}))
+				defer userSrv.Close()
+				tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+				}))
+				defer tokenSrv.Close()
 
-		store := provider.Provider()
-		store.SetContext(ctx)
-		require.NoError(tb, store.LoadFromDB(seedProviderDB(tb, tokenSrv.URL, userSrv.URL)))
-		api.providerStore = store
+				store := provider.Provider()
+				store.SetContext(ctx)
+				require.NoError(tb, store.LoadFromDB(seedProviderDB(tb, tokenSrv.URL, userSrv.URL)))
+				api.providerStore = store
 
-		// Write a login-mode session cookie.
-		key, err := api.socialSessionKey()
-		require.NoError(tb, err)
-		session := &provider.SocialAuthSession{State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/dashboard"}
-		cookW := httptest.NewRecorder()
-		require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
-		cookies := cookW.Result().Cookies()
-		require.Len(tb, cookies, 1)
+				// Write a login-mode session cookie.
+				key, err := api.socialSessionKey()
+				require.NoError(tb, err)
+				session := &provider.SocialAuthSession{ProviderName: sessionProvider, State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/dashboard"}
+				cookW := httptest.NewRecorder()
+				require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
+				cookies := cookW.Result().Cookies()
+				require.Len(tb, cookies, 1)
 
-		mockUser := &models.User{Model: gorm.Model{ID: 7}, Email: "u@example.com"}
-		socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-1", "u@example.com", true).
-			Return(&core.SocialAuthResult{User: mockUser, EmailVerified: true}, nil)
-		loginToken := CreateTestLoginToken(tb, ctx, "7")
-		authSvc.EXPECT().LoginID(mock.Anything, uint(7), mock.Anything, false).Return(loginToken, nil)
+				mockUser := &models.User{Model: gorm.Model{ID: 7}, Email: "u@example.com"}
+				socialSvc.EXPECT().LoginOrLink(mock.Anything, "google", "uid-1", "u@example.com", true).
+					Return(&core.SocialAuthResult{User: mockUser, EmailVerified: true}, nil)
+				loginToken := CreateTestLoginToken(tb, ctx, "7")
+				authSvc.EXPECT().LoginID(mock.Anything, uint(7), mock.Anything, false).Return(loginToken, nil)
 
-		e := echo.New()
-		req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google/callback?state=state-abc&code=code-1", nil)
-		req.AddCookie(cookies[0])
-		w := httptest.NewRecorder()
-		echoCtx := e.NewContext(req, w)
-		echoCtx.SetParamNames("provider")
-		echoCtx.SetParamValues("google")
+				e := echo.New()
+				req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google/callback?state=state-abc&code=code-1", nil)
+				req.AddCookie(cookies[0])
+				w := httptest.NewRecorder()
+				echoCtx := e.NewContext(req, w)
+				echoCtx.SetParamNames("provider")
+				echoCtx.SetParamValues("google")
 
-		require.NoError(tb, api.socialAuthCallback(echoCtx))
-		require.Equal(tb, http.StatusFound, w.Code)
-		require.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
-	}, socialTestOptions)
+				require.NoError(tb, api.socialAuthCallback(echoCtx))
+				require.Equal(tb, http.StatusFound, w.Code)
+				require.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
+			}, socialTestOptions)
+		})
+	}
 }
 
 func TestSocialAuthCallback_LinkFlow(t *testing.T) {
-	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		api, socialSvc := socialTestAPI(ctx)
+	for _, sessionProvider := range []string{"google", ""} {
+		t.Run("provider="+sessionProvider, func(t *testing.T) {
+			coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+				api, socialSvc := socialTestAPI(ctx)
 
-		userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"sub":"uid-9","email":"x@example.com"}`))
-		}))
-		defer userSrv.Close()
-		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
-		}))
-		defer tokenSrv.Close()
+				userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"sub":"uid-9","email":"x@example.com"}`))
+				}))
+				defer userSrv.Close()
+				tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+				}))
+				defer tokenSrv.Close()
 
-		store := provider.Provider()
-		store.SetContext(ctx)
-		require.NoError(tb, store.LoadFromDB(seedProviderDB(tb, tokenSrv.URL, userSrv.URL)))
-		api.providerStore = store
+				store := provider.Provider()
+				store.SetContext(ctx)
+				require.NoError(tb, store.LoadFromDB(seedProviderDB(tb, tokenSrv.URL, userSrv.URL)))
+				api.providerStore = store
 
-		// Write a link-mode session cookie.
-		key, err := api.socialSessionKey()
-		require.NoError(tb, err)
-		session := &provider.SocialAuthSession{State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/settings", Mode: provider.SessionModeLink, UserID: 9}
-		cookW := httptest.NewRecorder()
-		require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
-		cookies := cookW.Result().Cookies()
-		require.Len(tb, cookies, 1)
+				// Write a link-mode session cookie.
+				key, err := api.socialSessionKey()
+				require.NoError(tb, err)
+				session := &provider.SocialAuthSession{ProviderName: sessionProvider, State: "state-abc", CodeVerifier: "verifier-xyz", ReturnURL: "/settings", Mode: provider.SessionModeLink, UserID: 9}
+				cookW := httptest.NewRecorder()
+				require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
+				cookies := cookW.Result().Cookies()
+				require.Len(tb, cookies, 1)
 
-		socialSvc.EXPECT().LinkAccount(mock.Anything, uint(9), "google", "uid-9", "x@example.com").Return(nil)
+				socialSvc.EXPECT().LinkAccount(mock.Anything, uint(9), "google", "uid-9", "x@example.com").Return(nil)
 
-		e := echo.New()
-		req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google/callback?state=state-abc&code=code-1", nil)
-		req.AddCookie(cookies[0])
-		w := httptest.NewRecorder()
-		echoCtx := e.NewContext(req, w)
-		echoCtx.SetParamNames("provider")
-		echoCtx.SetParamValues("google")
+				e := echo.New()
+				req := httptest.NewRequest(http.MethodGet, "/api/account/auth/sso/google/callback?state=state-abc&code=code-1", nil)
+				req.AddCookie(cookies[0])
+				w := httptest.NewRecorder()
+				echoCtx := e.NewContext(req, w)
+				echoCtx.SetParamNames("provider")
+				echoCtx.SetParamValues("google")
 
-		require.NoError(tb, api.socialAuthCallback(echoCtx))
-		require.Equal(tb, http.StatusFound, w.Code)
-		require.Equal(tb, "/settings", w.Header().Get("Location"))
-	}, socialTestOptions)
+				require.NoError(tb, api.socialAuthCallback(echoCtx))
+				require.Equal(tb, http.StatusFound, w.Code)
+				require.Equal(tb, "/settings", w.Header().Get("Location"))
+			}, socialTestOptions)
+		})
+	}
 }
 
 // Every failure in the callback flow renders the sing-in error screen, never
@@ -485,7 +493,7 @@ func TestSocialAuthCallback_StateMismatchRendersErrorScreen(t *testing.T) {
 
 		key, err := api.socialSessionKey()
 		require.NoError(tb, err)
-		session := &provider.SocialAuthSession{State: "state-correct", CodeVerifier: "verifier-xyz", ReturnURL: "/"}
+		session := &provider.SocialAuthSession{ProviderName: "google", State: "state-correct", CodeVerifier: "verifier-xyz", ReturnURL: "/"}
 		cookW := httptest.NewRecorder()
 		require.NoError(tb, provider.SaveSession(cookW, session, key, api.cookieSetter(), api.Config().Config().Core.Domain))
 		cookies := cookW.Result().Cookies()
@@ -675,6 +683,36 @@ func TestSocialConsentSubmit_Approve(t *testing.T) {
 			var resp dto.SocialConsentResponse
 			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
 			require.Contains(tb, resp.RedirectURI, "/api/auth/complete")
+		})
+	}, socialTestOptions)
+}
+
+// Rejecting the consent clears the pending session and sends the user home.
+func TestSocialConsentSubmit_OTPApprovalRequiresChallenge(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, social := socialTestAPI(ctx)
+		user := &models.User{Model: gorm.Model{ID: 12}, Email: "taken@example.com", OTPEnabled: true}
+		coreTesting.GetMockUserService(ctx).EXPECT().EmailExists(mock.Anything, user.Email).Return(true, user, nil).Once()
+		coreTesting.GetMockUserService(ctx).EXPECT().IsAccountPendingDeletion(mock.Anything, user.ID).Return(false, nil).Once()
+		social.EXPECT().LinkAccount(mock.Anything, user.ID, "google", "uid-3", user.Email).Return(nil).Once()
+		auth := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		consentSession(tb, api, provider.SocialAuthSession{Mode: provider.SessionModeConsentLink, ReturnURL: "/dashboard", ProviderName: "google", ProviderUserID: "uid-3", Email: user.Email}, func(cookies []*http.Cookie) {
+			req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", strings.NewReader(`{"approve":true}`))
+			req.Header.Set("Content-Type", "application/json")
+			for _, cookie := range cookies {
+				req.AddCookie(cookie)
+			}
+			w := httptest.NewRecorder()
+			c := echo.New().NewContext(req, w)
+			c.SetParamNames("provider")
+			c.SetParamValues("google")
+			require.NoError(tb, api.socialConsentSubmit(c))
+			require.Equal(tb, http.StatusOK, w.Code)
+			var response dto.SocialConsentResponse
+			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &response))
+			require.Equal(tb, "/otp?to=%2Fdashboard", response.RedirectURI)
+			require.NotEmpty(tb, w.Result().Cookies())
+			auth.AssertNotCalled(tb, "LoginID")
 		})
 	}, socialTestOptions)
 }

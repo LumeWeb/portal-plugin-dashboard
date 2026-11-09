@@ -32,10 +32,11 @@ func (a *API) buildOTPRoutes(authMw echo.MiddlewareFunc, loginAuthMw2fa echo.Mid
 			router.WithSwaggerOptions(
 				router.WithoutDefaultSuccessResponse(),
 				router.WithSummary("Validate OTP code"),
-				router.WithDescription("Validates an OTP code to complete 2FA login."),
+				router.WithDescription("Validates an OTP code to complete 2FA login. Returns a JSON token unless an explicit return path requests browser navigation."),
 				router.WithQueryParam("return", "URL to redirect to after completion", "/onboarding"),
 				router.WithRequestBody(dto.OTPValidateRequest{}, "OTP code", true),
-				router.WithSuccessResponse(http.StatusFound, "Redirect to auth complete (on success)",
+				router.WithSuccessResponse(http.StatusOK, "Login token", router.WithJSONContent(dto.LoginResponse{})),
+				router.WithSuccessResponse(http.StatusFound, "Redirect to auth complete (with return path)",
 					router.WithHeader("Location", "URL to redirect to"),
 				),
 				router.WithErrorResponses(router.DefineSwaggerErrorResponses(
@@ -170,6 +171,11 @@ func (a *API) otpValidate(c echo.Context) error {
 		return nil
 	}
 
+	if c.QueryParam("return") == "" {
+		response := &dto.LoginResponse{Token: _jwt}
+		var responseDto dto.LoginResponse
+		return httputil.EncodeResponse(ctx, response, &responseDto)
+	}
 	return c.Redirect(http.StatusFound, redirectURL)
 }
 

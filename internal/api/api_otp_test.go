@@ -201,7 +201,7 @@ func TestOTPVerify_Failure_InvalidOTP(t *testing.T) {
 	})
 }
 
-func TestOTPValidate_Success(t *testing.T) {
+func TestOTPValidate_JSONForClientWithoutReturn(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Retrieve necessary services and router from the context
 		authSvc := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
@@ -237,9 +237,28 @@ func TestOTPValidate_Success(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		// Verify
-		assert.Equal(tb, http.StatusFound, w.Code)
-		assert.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
+		require.Equal(tb, http.StatusOK, w.Code)
+		require.Empty(tb, w.Header().Get("Location"))
+		var response dto.LoginResponse
+		require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &response))
+		require.Equal(tb, jwtToken, response.Token)
 
+	})
+}
+
+func TestOTPValidate_ExplicitReturnRedirectsToAuthComplete(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		auth := core.GetService[*coreTesting.MockAuthService](ctx, core.AUTH_SERVICE)
+		auth.EXPECT().LoginOTP(mock.Anything, uint(1), "123456", false).Return(CreateTestLoginToken(tb, ctx, "1"), nil).Once()
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/otp/validate?return=%2Fdashboard", bytes.NewBufferString(`{"otp":"123456"}`))
+		req.Host = core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE).APISubdomain(internal.PLUGIN_NAME, false)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+CreateTest2FAToken(tb, ctx, "1"))
+		w := httptest.NewRecorder()
+		ctx.Router().ServeHTTP(w, req)
+		require.Equal(tb, http.StatusFound, w.Code)
+		require.Contains(tb, w.Header().Get("Location"), "/api/auth/complete")
+		require.Contains(tb, w.Header().Get("Location"), "return=%2Fdashboard")
 	})
 }
 
