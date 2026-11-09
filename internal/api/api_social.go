@@ -275,7 +275,9 @@ func (a *API) socialAuthCallback(c echo.Context) error {
 	// The session is single-use; clear it regardless of the outcome below.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
 
-	if session.ProviderName != providerName ||
+	// Login/link cookies issued before this change lack ProviderName. Check
+	// provider binding when present without breaking their callbacks.
+	if (session.ProviderName != "" && session.ProviderName != providerName) ||
 		(session.Mode != "" && session.Mode != provider.SessionModeLogin && session.Mode != provider.SessionModeLink) ||
 		req.State == "" || req.State != session.State {
 		return a.socialErrorPage(ctx, providerName, NewError(ErrKeyInvalidState, nil))
