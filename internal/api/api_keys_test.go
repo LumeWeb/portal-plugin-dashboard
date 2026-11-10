@@ -204,6 +204,23 @@ func TestGetAPIKeysRejectsUnsafeQueriesBeforeServiceCall(t *testing.T) {
 	}
 }
 
+func TestGetAPIKeysRejectsMalformedQueryEscape(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		userSvc := coreTesting.GetMockUserService(ctx)
+		apiKeySvc := core.GetService[*pluginCore.MockAPIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		userSvc.EXPECT().AccountExists(mock.Anything, uint(1)).Return(true, &models.User{Model: gorm.Model{ID: 1}}, nil).Once()
+		token := CreateTestLoginToken(tb, ctx, "1")
+		domain := core.GetService[core.HTTPService](ctx, core.HTTP_SERVICE).APISubdomain(internal.PLUGIN_NAME, false)
+		req := httptest.NewRequest(http.MethodGet, "/api/account/keys?filters%5Buser_id%5D%5Beq%5D=%zz", nil)
+		req.Host = domain
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		ctx.Router().ServeHTTP(w, req)
+		require.Equal(tb, http.StatusBadRequest, w.Code, w.Body.String())
+		apiKeySvc.AssertNotCalled(tb, "GetAPIKeys", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	})
+}
+
 func TestGetAPIKeysPreservesNumericOnlyName(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		userSvc := coreTesting.GetMockUserService(ctx)
