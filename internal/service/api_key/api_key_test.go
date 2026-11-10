@@ -12,6 +12,7 @@ import (
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/queryutil"
+	"go.lumeweb.com/queryutil/filter"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,6 +94,33 @@ func TestAPIKeyService_CreateAPIKey_DuplicateName(t *testing.T) {
 		require.NoError(tb, result.Error)
 		assert.Equal(tb, apiKey2.ID, fetchedKey2.ID)
 
+	})
+}
+
+func TestAPIKeyService_GetAPIKeysRejectsUnsafeQueriesBeforeDatabaseAccess(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		svc := core.GetService[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+		_, err := svc.CreateAPIKey(context.Background(), 1, "owner")
+		require.NoError(tb, err)
+		_, err = svc.CreateAPIKey(context.Background(), 2, "other")
+		require.NoError(tb, err)
+		for _, tc := range []struct {
+			name    string
+			filters []queryutil.CrudFilter
+			sorts   []queryutil.Sort
+		}{
+			{"tenant field", []queryutil.CrudFilter{queryutil.NewLogicalFilter("user_id", filter.OpEq, 2)}, nil},
+			{"nested expression", []queryutil.CrudFilter{queryutil.NewConditionalFilter(filter.LogicalOr, []queryutil.CrudFilter{queryutil.NewLogicalFilter("name) OR 1=1 --", filter.OpEq, "x")})}, nil},
+			{"sort expression", nil, []queryutil.Sort{{Field: "(SELECT 1)", Order: filter.OrderAsc}}},
+			{"invalid sort direction", nil, []queryutil.Sort{{Field: "name", Order: filter.SortOrder("asc; DROP TABLE api_keys")}}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				keys, total, err := svc.GetAPIKeys(context.Background(), 1, tc.filters, tc.sorts, queryutil.DefaultPagination)
+				require.ErrorIs(t, err, filter.ErrInvalidQuery)
+				require.Empty(t, keys)
+				require.Zero(t, total)
+			})
+		}
 	})
 }
 

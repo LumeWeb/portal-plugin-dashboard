@@ -123,10 +123,8 @@ func (a *API) getAPIKeys(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	return queryutilHttp.ProcessListRequest(
-		c.Response(),
-		c.Request(),
-		"api_keys",
+	return queryutilHttp.ProcessListRequestWithPolicy(
+		c.Response(), c.Request(), "api_keys", dto.APIKeys(),
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.APIKey, int64, error) {
 			return a.apiKey.GetAPIKeys(ctx.Request().Context(), user, filters, sorts, pagination)
 		},
@@ -134,7 +132,7 @@ func (a *API) getAPIKeys(c echo.Context) error {
 			var resp dto.APIKeyResponse
 			_ = resp.FromModel(key)
 			return resp
-		},
+		}, queryutil.WithStringFields("name"),
 	)
 }
 

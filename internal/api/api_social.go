@@ -346,10 +346,8 @@ func (a *API) listSocialLinks(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, nil), http.StatusUnauthorized)
 	}
 
-	return queryutilHttp.ProcessListRequest(
-		c.Response(),
-		c.Request(),
-		"social_accounts",
+	return queryutilHttp.ProcessListRequestWithPolicy(
+		c.Response(), c.Request(), "social_accounts", dto.SocialAccounts(),
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.SocialAccount, int64, error) {
 			return a.socialAuth.ListAccounts(ctx.Request().Context(), userId, filters, sorts, pagination)
 		},
@@ -360,7 +358,7 @@ func (a *API) listSocialLinks(c echo.Context) error {
 				Email:          acct.Email,
 				CreatedAt:      acct.CreatedAt,
 			}
-		},
+		}, queryutil.WithStringFields("provider", "provider_user_id", "email"),
 	)
 }
 

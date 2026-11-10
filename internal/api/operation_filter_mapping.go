@@ -43,10 +43,10 @@ func mapOperationFilter(f queryutilFilter.CrudFilter) (queryutilFilter.CrudFilte
 		if field == "cid" {
 			decoded, err := decodeCIDToMultihash(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid cid filter value: %w", err)
+				return nil, fmt.Errorf("%w: invalid cid filter value: %v", queryutilFilter.ErrInvalidQuery, err)
 			}
 			if decoded == nil {
-				return nil, fmt.Errorf("cid filter requires a string value, got %T", value)
+				return nil, fmt.Errorf("%w: cid filter requires a string value, got %T", queryutilFilter.ErrInvalidQuery, value)
 			}
 			return queryutilFilter.NewLogicalFilter(dbField, v.Operator(), decoded), nil
 		}

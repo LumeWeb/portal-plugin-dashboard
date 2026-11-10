@@ -161,10 +161,8 @@ func (e *SocialAdminExtension) handleListProviders(c echo.Context) error {
 	ctx := httputil.Context(c)
 	reqCtx := ctx.Context.Request().Context()
 
-	return queryutilHttp.ProcessListRequest(
-		c.Response(),
-		c.Request(),
-		"social_providers",
+	return queryutilHttp.ProcessListRequestWithPolicy(
+		c.Response(), c.Request(), "social_providers", dto.SocialProviders(),
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginDb.SocialProviderConfig, int64, error) {
 			return e.socialProvider.List(reqCtx, filters, sorts, pagination)
 		},
@@ -172,7 +170,7 @@ func (e *SocialAdminExtension) handleListProviders(c echo.Context) error {
 			var resp dto.SocialProviderResponse
 			resp.FromModel(config)
 			return resp
-		},
+		}, queryutil.WithStringFields("provider_id", "display_name", "client_id"),
 	)
 }
 

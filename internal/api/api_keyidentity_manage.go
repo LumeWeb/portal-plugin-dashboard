@@ -8,11 +8,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
-	"go.lumeweb.com/portal/db/models"
+	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/queryutil"
 	queryutilHttp "go.lumeweb.com/queryutil/http"
-	router "go.lumeweb.com/portal-router"
 	"go.uber.org/zap"
 )
 
@@ -293,10 +293,8 @@ func (a *API) keyIdentityList(c echo.Context) error {
 		return ctx.Error(core.NewAccountError(core.ErrKeyInvalidLogin, fmt.Errorf("not authenticated")), http.StatusUnauthorized)
 	}
 
-	return queryutilHttp.ProcessListRequest(
-		c.Response(),
-		c.Request(),
-		"key_identities",
+	return queryutilHttp.ProcessListRequestWithPolicy(
+		c.Response(), c.Request(), "key_identities", dto.KeyIdentities(),
 		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.KeyIdentity, int64, error) {
 			return a.user.ListKeyIdentities(c.Request().Context(), userID, filters, sorts, pagination)
 		},
@@ -306,6 +304,6 @@ func (a *API) keyIdentityList(c echo.Context) error {
 				Key:      id.Key,
 				Metadata: dto.NewJSONRawMessageSchema(id.Metadata),
 			}
-		},
+		}, queryutil.WithStringFields("type", "key"),
 	)
 }

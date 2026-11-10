@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/db"
@@ -78,10 +79,15 @@ func (s *APIKeyServiceDefault) GetAPIKeys(ctx context.Context, userID uint, filt
 	ctx, span := core.TraceMethod(ctx, "APIKeyServiceDefault.GetAPIKeys")
 	defer span.End()
 
+	filters, err := dto.APIKeys().Normalize(filters, sorts)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	var apiKeys []*pluginDb.APIKey
 	var total int64
 
-	query := s.DB().Model(&pluginDb.APIKey{}).Where(&pluginDb.APIKey{UserID: userID})
+	query := s.DB().WithContext(ctx).Model(&pluginDb.APIKey{}).Where(&pluginDb.APIKey{UserID: userID})
 
 	// Apply filters, sorts and pagination using queryutil helpers. Wire up the
 	// global-search config so a 'q' search (api_keys_list's search arg) filters
