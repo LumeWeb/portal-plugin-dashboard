@@ -4,7 +4,15 @@ package dto
 import "go.lumeweb.com/queryutil/filter"
 
 func APIKeys() filter.QueryPolicy {
-	fields := filter.AllScalarFieldRules("name", "last_used_at", "created_at")
+	fields := filter.AllScalarFieldRules("last_used_at", "created_at")
+	// WithStringFields preserves numeric-looking names; its parser deliberately
+	// rejects numeric and range operators on those strings.
+	fields["name"] = filter.FieldRule{Operators: []filter.Operator{
+		filter.OpEq, filter.OpNe, filter.OpIn, filter.OpNin, filter.OpNull, filter.OpNnull,
+		filter.OpContains, filter.OpContainss, filter.OpNcontains, filter.OpNcontainss,
+		filter.OpStartswith, filter.OpStartswiths, filter.OpNstartswith, filter.OpNstartswiths,
+		filter.OpEndswith, filter.OpEndswiths, filter.OpNendswith, filter.OpNendswiths,
+	}}
 	fields["q"] = filter.FieldRule{Operators: []filter.Operator{filter.OpContains}}
 	return filter.QueryPolicy{Fields: fields, SortFields: []string{"name", "last_used_at", "created_at"}}
 }

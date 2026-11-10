@@ -40,6 +40,25 @@ func TestListPoliciesRejectUntrustedFieldsAndSorts(t *testing.T) {
 	}
 }
 
+func TestAPIKeyNamePolicyMatchesStringParser(t *testing.T) {
+	policy := APIKeys()
+	for _, item := range []queryutil.CrudFilter{
+		queryutil.NewLogicalFilter("name", filter.OpEq, "00123"),
+		queryutil.NewLogicalFilter("name", filter.OpIn, []any{"00123", "00456"}),
+		queryutil.NewLogicalFilter("name", filter.OpContains, "123"),
+	} {
+		_, err := policy.Normalize([]queryutil.CrudFilter{item}, nil)
+		require.NoError(t, err)
+	}
+	for _, item := range []queryutil.CrudFilter{
+		queryutil.NewLogicalFilter("name", filter.OpGt, 123),
+		queryutil.NewLogicalFilter("name", filter.OpBetween, []any{1, 2}),
+	} {
+		_, err := policy.Normalize([]queryutil.CrudFilter{item}, nil)
+		require.ErrorIs(t, err, filter.ErrInvalidQuery)
+	}
+}
+
 func TestAPIKeysNormalizesNestedLegacySearch(t *testing.T) {
 	original := queryutil.NewLogicalFilter("q", filter.OpEq, "00123")
 	filters := []queryutil.CrudFilter{queryutil.NewConditionalFilter(filter.LogicalAnd, []queryutil.CrudFilter{original})}
