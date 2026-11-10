@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
 	"go.lumeweb.com/httputil"
 	mcontext "go.lumeweb.com/portal-middleware/context"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
@@ -518,8 +520,8 @@ func (a *API) finishSocialLogin(ctx httputil.RequestContext, providerName string
 // is re-verified against the current account for that email; ok=false falls
 // through so the caller keeps the original conflict error.
 func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string, user *provider.OAuth2User, returnUrl string) (bool, error) {
-	exists, _, err := a.user.EmailExists(ctx.Request().Context(), user.Email)
-	if err != nil || !exists {
+	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), user.Email)
+	if err != nil || !exists || existing == nil {
 		return false, nil
 	}
 
@@ -528,7 +530,13 @@ func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string
 		return false, err
 	}
 
+	consentID, err := generateRandomString(32)
+	if err != nil {
+		return false, err
+	}
 	session := &provider.SocialAuthSession{
+		ConsentID:      consentID,
+		UserID:         existing.ID,
 		Mode:           provider.SessionModeConsentLink,
 		ReturnURL:      returnUrl,
 		ProviderName:   providerName,
@@ -543,10 +551,8 @@ func (a *API) promptLinkConsent(ctx httputil.RequestContext, providerName string
 	return true, nil
 }
 
-// socialConsentPage renders the link-consent page. The consent-mode session
-// cookie is the credential: it is HMAC-signed, single-use, and short-lived, so
-// the page only renders for a real, in-flight identity merge. A missing or
-// mismatched session redirects home.
+// socialConsentPage renders a valid, unexpired signed provider-link request.
+// Consumption is checked on submission, not on page load.
 func (a *API) socialConsentPage(c echo.Context) error {
 	ctx := httputil.Context(c)
 
@@ -557,7 +563,8 @@ func (a *API) socialConsentPage(c echo.Context) error {
 	}
 	session, err := provider.GetSession(c.Request(), key)
 	if err != nil || session.Mode != provider.SessionModeConsentLink ||
-		session.ProviderName == "" || session.ProviderUserID == "" || session.Email == "" {
+		session.UserID == 0 || session.ConsentID == "" || session.ProviderName == "" ||
+		session.ProviderUserID == "" || session.Email == "" || session.ProviderName != c.Param("provider") {
 		return c.Redirect(http.StatusFound, "/")
 	}
 
@@ -596,7 +603,8 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 	}
 	session, err := provider.GetSession(c.Request(), key)
 	if err != nil || session.Mode != provider.SessionModeConsentLink ||
-		session.ProviderName == "" || session.ProviderUserID == "" || session.Email == "" {
+		session.UserID == 0 || session.ConsentID == "" || session.ProviderName == "" ||
+		session.ProviderUserID == "" || session.Email == "" || session.ProviderName != c.Param("provider") {
 		// Expired or forged consent: clear whatever cookie is present and send
 		// the user home. A redirect payload (not a canonical error body) lets
 		// the consent page navigate away instead of stranding the user on an
@@ -604,8 +612,16 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 		provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
 		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
 	}
-	// Single-use: the pending identity cannot be approved twice.
 	provider.ClearSession(c.Response(), a.cookieSetter(), a.Config().Config().Core.Domain)
+	if a.consent == nil {
+		return ctx.Error(NewError(ErrKeyInternalError, errors.New("consent service unavailable")), http.StatusInternalServerError)
+	}
+	if err := a.consent.Consume(ctx.Request().Context(), session.ConsentID, time.Unix(session.ExpiresAt, 0)); err != nil {
+		if errors.Is(err, pluginCore.ErrInvalidConsent) {
+			return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
+		}
+		return ctx.Error(NewError(ErrKeyInternalError, err), http.StatusInternalServerError)
+	}
 
 	if !req.Approve {
 		responseModel := &dto.SocialConsentResponse{RedirectURI: "/"}
@@ -614,8 +630,8 @@ func (a *API) socialConsentSubmit(c echo.Context) error {
 	}
 
 	exists, existing, err := a.user.EmailExists(ctx.Request().Context(), session.Email)
-	if err != nil || !exists {
-		// The email no longer maps to an account; send the user home.
+	if err != nil || !exists || existing == nil || existing.ID != session.UserID {
+		// A challenge must never follow an email address to a different account.
 		return c.JSON(http.StatusBadRequest, dto.SocialConsentResponse{RedirectURI: "/"})
 	}
 

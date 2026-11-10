@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,10 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/httputil"
 	mcontext "go.lumeweb.com/portal-middleware/context"
+	pluginCore "go.lumeweb.com/portal-plugin-dashboard/core"
 	"go.lumeweb.com/portal-plugin-dashboard/internal"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/api/dto"
 	pluginDb "go.lumeweb.com/portal-plugin-dashboard/internal/db/models"
 	"go.lumeweb.com/portal-plugin-dashboard/internal/provider"
+	"go.lumeweb.com/portal-plugin-dashboard/internal/service/social_consent"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/portal/core/testing/mocks"
@@ -31,6 +34,7 @@ import (
 // socialTestOptions registers the mock social auth service so the API wires it
 // into the socialAuth field during startup.
 var socialTestOptions = coreTesting.CombineOptions(
+	coreTesting.WithServiceFactory(pluginCore.SOCIAL_CONSENT_SERVICE, social_consent.NewSocialConsentService),
 	coreTesting.WithMockServiceFactory(core.SOCIAL_AUTH_SERVICE, func(tb interface {
 		mock.TestingT
 		Cleanup(func())
@@ -58,6 +62,15 @@ func socialTestAPI(ctx coreTesting.TestContext) (*API, *coreTesting.MockSocialAu
 	api := core.GetAPI(internal.PLUGIN_NAME).(*API)
 	socialSvc := core.GetService[*coreTesting.MockSocialAuthService](ctx, core.SOCIAL_AUTH_SERVICE)
 	api.socialAuth = socialSvc
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(ctx.T(), err)
+	require.NoError(ctx.T(), db.AutoMigrate(&pluginDb.SocialConsent{}))
+	sqlDB, err := db.DB()
+	require.NoError(ctx.T(), err)
+	ctx.T().Cleanup(func() { _ = sqlDB.Close() })
+	consent := core.GetService[*social_consent.SocialConsentServiceDefault](ctx, pluginCore.SOCIAL_CONSENT_SERVICE)
+	consent.SetDB(db)
+	api.consent = consent
 	return api, socialSvc
 }
 
@@ -690,12 +703,28 @@ func TestSocialConsentSubmit_Approve(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			echoCtx := e.NewContext(req, w)
+			echoCtx.SetParamNames("provider")
+			echoCtx.SetParamValues("google")
 
 			require.NoError(tb, api.socialConsentSubmit(echoCtx))
 			require.Equal(tb, http.StatusOK, w.Code)
 			var resp dto.SocialConsentResponse
 			require.NoError(tb, json.Unmarshal(w.Body.Bytes(), &resp))
 			require.Contains(tb, resp.RedirectURI, "/api/auth/complete")
+
+			// A saved cookie cannot approve a second time, even after the browser
+			// receives a Set-Cookie clearing the session.
+			replayReq := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", strings.NewReader(`{"approve":true}`))
+			replayReq.Header.Set("Content-Type", "application/json")
+			for _, cookie := range cookies {
+				replayReq.AddCookie(cookie)
+			}
+			replay := httptest.NewRecorder()
+			replayCtx := echo.New().NewContext(replayReq, replay)
+			replayCtx.SetParamNames("provider")
+			replayCtx.SetParamValues("google")
+			require.NoError(tb, api.socialConsentSubmit(replayCtx))
+			require.Equal(tb, http.StatusBadRequest, replay.Code)
 		})
 	}, socialTestOptions)
 }
@@ -752,6 +781,8 @@ func TestSocialConsentSubmit_Reject(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			echoCtx := e.NewContext(req, w)
+			echoCtx.SetParamNames("provider")
+			echoCtx.SetParamValues("google")
 
 			require.NoError(tb, api.socialConsentSubmit(echoCtx))
 			require.Equal(tb, http.StatusOK, w.Code)
@@ -812,6 +843,8 @@ func TestSocialConsentSubmit_EmailGone(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			echoCtx := e.NewContext(req, w)
+			echoCtx.SetParamNames("provider")
+			echoCtx.SetParamValues("google")
 
 			require.NoError(tb, api.socialConsentSubmit(echoCtx))
 			require.Equal(tb, http.StatusBadRequest, w.Code)
@@ -821,10 +854,35 @@ func TestSocialConsentSubmit_EmailGone(t *testing.T) {
 	}, socialTestOptions)
 }
 
+func TestSocialConsentSubmit_EmailReassignedCannotLink(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		api, social := socialTestAPI(ctx)
+		coreTesting.GetMockUserService(ctx).EXPECT().EmailExists(mock.Anything, "taken@example.com").Return(true, &models.User{Model: gorm.Model{ID: 99}, Email: "taken@example.com"}, nil).Once()
+		consentSession(tb, api, provider.SocialAuthSession{Mode: provider.SessionModeConsentLink, ProviderName: "google", ProviderUserID: "uid-3", Email: "taken@example.com"}, func(cookies []*http.Cookie) {
+			req := httptest.NewRequest(http.MethodPost, "/api/account/auth/sso/google/consent", strings.NewReader(`{"approve":true}`))
+			req.Header.Set("Content-Type", "application/json")
+			for _, cookie := range cookies {
+				req.AddCookie(cookie)
+			}
+			w := httptest.NewRecorder()
+			c := echo.New().NewContext(req, w)
+			c.SetParamNames("provider")
+			c.SetParamValues("google")
+			require.NoError(tb, api.socialConsentSubmit(c))
+			require.Equal(tb, http.StatusBadRequest, w.Code)
+			social.AssertNotCalled(tb, "LinkAccount")
+		})
+	}, socialTestOptions)
+}
+
 // consentSession writes a consent-mode session cookie and invokes the callback
 // with the resulting cookies, mirroring the redirect the browser would carry.
 func consentSession(tb testing.TB, api *API, session provider.SocialAuthSession, fn func([]*http.Cookie)) {
 	tb.Helper()
+	if session.UserID == 0 {
+		session.UserID = 12 // The existing account in these consent fixtures.
+	}
+	session.ConsentID = "consent-nonce-" + rand.Text()
 	key, err := api.socialSessionKey()
 	require.NoError(tb, err)
 	cookW := httptest.NewRecorder()

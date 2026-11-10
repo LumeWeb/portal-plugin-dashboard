@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,15 @@ type APIKeyService interface {
 }
 
 const SOCIAL_PROVIDER_SERVICE = "social_provider"
+
+const SOCIAL_CONSENT_SERVICE = "social_consent"
+
+var ErrInvalidConsent = errors.New("invalid or consumed social consent")
+
+type SocialConsentService interface {
+	core.Service
+	Consume(ctx context.Context, token string, expiresAt time.Time) error
+}
 
 // SocialProviderService manages the DB-backed OAuth2 client provider configs.
 // APIs route all provider config access through this service; handlers never

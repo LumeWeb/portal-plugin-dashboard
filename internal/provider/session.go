@@ -34,6 +34,8 @@ const (
 // SocialAuthSession is the minimal state held between the login redirect and
 // the callback. It is signed (HMAC) and stored in a cookie.
 type SocialAuthSession struct {
+	ExpiresAt    int64  `json:"expires_at"`
+	ConsentID    string `json:"consent_id,omitempty"`
 	State        string `json:"state"`
 	CodeVerifier string `json:"code_verifier"`
 	ReturnURL    string `json:"return_url"`
@@ -52,6 +54,7 @@ type SocialAuthSession struct {
 
 // SaveSession signs the session and stores it as a cookie.
 func SaveSession(w http.ResponseWriter, session *SocialAuthSession, key []byte, cs adapter.CookieSetter, domain string) error {
+	session.ExpiresAt = time.Now().Add(SessionMaxAge).Unix()
 	payload, err := json.Marshal(session)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
@@ -100,6 +103,9 @@ func GetSession(r *http.Request, key []byte) (*SocialAuthSession, error) {
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
 
+	if session.ExpiresAt <= time.Now().Unix() {
+		return nil, errors.New("expired session")
+	}
 	return &session, nil
 }
 

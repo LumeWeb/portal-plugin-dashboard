@@ -56,6 +56,7 @@ type API struct {
 	password       core.PasswordResetService
 	otp            core.OTPService
 	apiKey         pluginCore.APIKeyService
+	consent        pluginCore.SocialConsentService
 	access         core.AccessService
 	http           core.HTTPService
 	requestSvc     core.RequestService
@@ -96,6 +97,7 @@ func NewAPI() (core.API, []core.ContextBuilderOption, error) {
 			api.password = core.GetServiceOptional[core.PasswordResetService](ctx, core.PASSWORD_RESET_SERVICE)
 			api.otp = core.GetServiceOptional[core.OTPService](ctx, core.OTP_SERVICE)
 			api.apiKey = core.GetServiceOptional[pluginCore.APIKeyService](ctx, pluginCore.API_KEY_SERVICE)
+			api.consent = core.GetServiceOptional[pluginCore.SocialConsentService](ctx, pluginCore.SOCIAL_CONSENT_SERVICE)
 			api.access = core.GetServiceOptional[core.AccessService](ctx, core.ACCESS_SERVICE)
 			// Logger is provided by BaseComponent via ContextWithStartupComponent
 			api.http = ctx.Service(core.HTTP_SERVICE).(core.HTTPService)
